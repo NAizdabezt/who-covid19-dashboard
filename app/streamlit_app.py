@@ -36,15 +36,46 @@ st.sidebar.header("🎚️ Bộ lọc dữ liệu")
 countries = sorted(df["Country"].unique())
 selected_country = st.sidebar.selectbox("🌎 Chọn quốc gia", ["Toàn cầu"] + countries)
 
-# Bộ lọc thời gian
-min_date, max_date = pd.to_datetime(df["Date_reported"].min()), pd.to_datetime(df["Date_reported"].max())
+# --- Bộ lọc thời gian (sửa lại an toàn) ---
+# đảm bảo Date_reported là datetime
+df['Date_reported'] = pd.to_datetime(df['Date_reported'], errors='coerce')
+
+# tính min/max từ toàn bộ df (dùng .date() để lấy datetime.date)
+min_ts = df['Date_reported'].min()
+max_ts = df['Date_reported'].max()
+
+# nếu thiếu dữ liệu an toàn xử lý
+if pd.isna(min_ts) or pd.isna(max_ts):
+    st.sidebar.warning("Không có dữ liệu ngày hợp lệ trong dataset.")
+    # fallback: đặt ngày hiện tại
+    min_date = max_date = pd.Timestamp.today().date()
+else:
+    min_date = min_ts.date()
+    max_date = max_ts.date()
+
+# Hiển thị date_input với giá trị kiểu datetime.date
 start_date, end_date = st.sidebar.date_input(
-    "📆 Khoảng thời gian", [min_date, max_date],
-    min_value=min_date, max_value=max_date
+    "📆 Khoảng thời gian",
+    value=[min_date, max_date],
+    min_value=min_date,
+    max_value=max_date
 )
 
-df["Date_reported"] = pd.to_datetime(df["Date_reported"])
-df = df[(df["Date_reported"] >= pd.to_datetime(start_date)) & (df["Date_reported"] <= pd.to_datetime(end_date))]
+# Nếu người dùng lỡ chọn 1 giá trị đơn lẻ (date_input có thể trả về single date nếu only one)
+if isinstance(start_date, tuple) or isinstance(start_date, list):
+    # đôi khi colab/streamlit trả tuple — chuẩn hóa
+    start_date, end_date = start_date
+
+# đảm bảo start_date <= end_date (nếu không, hoán đổi hoặc cảnh báo)
+if start_date > end_date:
+    start_date, end_date = end_date, start_date
+
+# Chuyển về pandas timestamp để lọc df
+start_ts = pd.Timestamp(start_date)
+end_ts = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)  # bao gồm cả ngày end_date
+
+# Lọc dữ liệu an toàn theo khoảng
+df = df[(df['Date_reported'] >= start_ts) & (df['Date_reported'] <= end_ts)]
 
 show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
 show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D (Globe)", value=False)
