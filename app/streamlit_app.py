@@ -187,14 +187,20 @@ with tab1:
 # --- TAB 2: Bản đồ ---
 with tab2:
     st.subheader("🗺️ Bản đồ COVID-19 theo quốc gia")
-    missing_iso = latest_filtered[~latest_filtered["Country_code3"].isin(px.data.gapminder()["iso_alpha"])]
-    st.write("⚠️ Các quốc gia/vùng không được Plotly hỗ trợ:", missing_iso["Country"].tolist())
 
+    # ✅ Bảo đảm có cột ISO3 từ dữ liệu gốc (latest)
+    if "Country_code3" not in latest_filtered.columns:
+        latest_filtered = latest_filtered.merge(
+            latest[["Country", "Country_code3"]].drop_duplicates(),
+            on="Country",
+            how="left"
+        )
 
     # --- Bản đồ 2D ---
+    st.markdown("#### 🗺️ Bản đồ 2D COVID-19 theo quốc gia")
     fig = px.choropleth(
         latest_filtered,
-        locations="Country_code3",  # Dùng mã ISO3 có sẵn
+        locations="Country_code3",                # ISO3 code
         color="Cumulative_cases",
         hover_name="Country",
         color_continuous_scale="Reds",
@@ -210,10 +216,10 @@ with tab2:
     st.plotly_chart(fig, use_container_width=True)
 
     # --- Bản đồ 3D ---
-    st.subheader("🌐 Bản đồ 3D (Globe)")
+    st.markdown("#### 🌐 Bản đồ 3D (Interactive Globe)")
     fig_globe = go.Figure(go.Choropleth(
         locations=latest_filtered['Country_code3'],
-        z=latest_filtered['Cumulative_cases'],
+        z=latest_filtered['Cumulative_cases'],  # có thể đổi sang Cases_per_million nếu muốn
         text=latest_filtered['Country'] + "<br>" +
              "Tổng ca nhiễm: " + latest_filtered['Cumulative_cases'].astype(str),
         colorscale='Reds',
@@ -221,17 +227,27 @@ with tab2:
         marker_line_color='black',
         marker_line_width=0.5
     ))
+
     fig_globe.update_geos(
         projection_type="orthographic",
-        showcountries=True, showcoastlines=True,
-        showocean=True, showland=True,
-        landcolor="LightGreen", oceancolor="LightBlue"
+        showcountries=True,
+        showcoastlines=True,
+        showocean=True,
+        showland=True,
+        landcolor="LightGreen",
+        oceancolor="LightBlue",
+        lataxis_showgrid=True,
+        lonaxis_showgrid=True,
     )
+
     fig_globe.update_layout(
-        margin={"r":0,"t":0,"l":0,"b":0},
+        title_text='Tổng số ca COVID-19 theo quốc gia (Interactive Globe)',
+        margin={"r": 0, "t": 50, "l": 0, "b": 0},
         height=600
     )
+
     st.plotly_chart(fig_globe, use_container_width=True)
+
 
 # --- TAB 3: Top quốc gia ---
 with tab3:
