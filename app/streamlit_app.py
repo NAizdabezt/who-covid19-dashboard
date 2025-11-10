@@ -125,11 +125,20 @@ latest_filtered = (
     })
 )
 
-# ⚠️ Không tính theo dân số vì không có cột Population
+# ✅ Ghép thêm thông tin bổ sung từ file latest gốc (đã có Country_code3, Population,…)
+latest_filtered = latest_filtered.merge(
+    latest[["Country", "Country_code", "Country_code3", "Population"]],
+    on=["Country", "Country_code"],
+    how="left"
+)
+
+# Tính thêm các chỉ số
+latest_filtered["Cases_per_million"] = (
+    latest_filtered["Cumulative_cases"] / (latest_filtered["Population"] / 1_000_000)
+)
 latest_filtered["Fatality_rate"] = (
-    (latest_filtered["Cumulative_deaths"] / latest_filtered["Cumulative_cases"]) * 100
-).round(2)
-latest_filtered["Fatality_rate"] = latest_filtered["Fatality_rate"].fillna(0)
+    latest_filtered["Cumulative_deaths"] / latest_filtered["Cumulative_cases"]
+) * 100
 
 # ===============================
 # 4️⃣ KPI Cards
