@@ -176,12 +176,35 @@ with tab1:
     st.plotly_chart(fig_line, use_container_width=True)
 
 # --- TAB 2: Bản đồ ---
+import pycountry
+
+# Chuẩn hóa mã quốc gia ISO-3 (3 ký tự) cho plotly
+def get_iso3(code_or_name):
+    try:
+        # Ưu tiên mã code
+        country = pycountry.countries.get(alpha_2=code_or_name)
+        if country:
+            return country.alpha_3
+        # Nếu không có, thử lấy theo tên
+        country = pycountry.countries.lookup(code_or_name)
+        return country.alpha_3
+    except:
+        return None
+
+# Tạo cột Country_code3 cho choropleth và globe
+latest_filtered["Country_code3"] = latest_filtered["Country_code"].apply(get_iso3)
+latest_filtered["Country_code3"] = latest_filtered["Country_code3"].fillna(
+    latest_filtered["Country"].apply(get_iso3)
+)
+
 with tab2:
     st.subheader("🗺️ Bản đồ COVID-19 theo quốc gia")
-    if "Country_code" in latest_filtered.columns:
+
+    # --- Bản đồ 2D ---
+    if show_globe2d:
         fig = px.choropleth(
             latest_filtered,
-            locations="Country_code",
+            locations="Country_code3",   # dùng ISO3
             color="Cumulative_cases",
             hover_name="Country",
             color_continuous_scale="Reds",
@@ -195,8 +218,29 @@ with tab2:
             title_x=0.5
         )
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("Không tìm thấy cột mã quốc gia để vẽ bản đồ.")
+
+    # --- Bản đồ 3D ---
+    if show_globe3d:
+        st.subheader("🌐 Bản đồ 3D (Globe)")
+        fig_globe = go.Figure(go.Choropleth(
+            locations=latest_filtered['Country_code3'],
+            z=latest_filtered['Cumulative_cases'],
+            text=latest_filtered['Country'] + "<br>" +
+                 "Tổng ca nhiễm: " + latest_filtered['Cumulative_cases'].astype(str),
+            colorscale='Reds',
+            colorbar_title='Ca nhiễm',
+            marker_line_color='black',
+            marker_line_width=0.5
+        ))
+        fig_globe.update_geos(
+            projection_type="orthographic",
+            showcountries=True, showcoastlines=True,
+            showocean=True, showland=True,
+            landcolor="LightGreen", oceancolor="LightBlue"
+        )
+        fig_globe.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=600)
+        st.plotly_chart(fig_globe, use_container_width=True)
+
 
 # --- TAB 3: Top quốc gia ---
 with tab3:
