@@ -110,13 +110,34 @@ show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D", value=Tru
 df = df_filtered.copy()
 
 # ===============================
+# ✅ Sau khi lọc theo thời gian xong
+# ===============================
+# Tạo bảng latest_filtered: tổng ca và tử vong trong khoảng đã lọc
+latest_filtered = (
+    df_filtered.groupby(["Country", "Country_code3"], as_index=False)
+    .agg({
+        "New_cases": "sum",
+        "New_deaths": "sum",
+        "Population": "first"
+    })
+    .rename(columns={
+        "New_cases": "Cumulative_cases",
+        "New_deaths": "Cumulative_deaths"
+    })
+)
+
+# Tính thêm các chỉ số
+latest_filtered["Cases_per_million"] = latest_filtered["Cumulative_cases"] / (latest_filtered["Population"] / 1_000_000)
+latest_filtered["Fatality_rate"] = (latest_filtered["Cumulative_deaths"] / latest_filtered["Cumulative_cases"]) * 100
+
+# ===============================
 # 4️⃣ KPI Cards
 # ===============================
 col1, col2, col3, col4 = st.columns(4)
-total_cases = latest["Cumulative_cases"].sum()
-total_deaths = latest["Cumulative_deaths"].sum()
-fatality_rate = total_deaths / total_cases * 100
-affected_countries = latest["Country"].nunique()
+total_cases = latest_filtered["Cumulative_cases"].sum()
+total_deaths = latest_filtered["Cumulative_deaths"].sum()
+fatality_rate = total_deaths / total_cases * 100 if total_cases > 0 else 0
+affected_countries = latest_filtered["Country"].nunique()
 
 col1.metric("🦠 Tổng ca nhiễm", f"{total_cases:,}")
 col2.metric("⚰️ Tổng ca tử vong", f"{total_deaths:,}")
@@ -132,12 +153,12 @@ tab1, tab2, tab3, tab4 = st.tabs(["📈 Xu hướng ca nhiễm", "🗺️ Bản 
 with tab1:
     st.subheader("📈 Xu hướng ca nhiễm theo thời gian")
     if selected_country == "Toàn cầu":
-        global_trend = df.groupby("Date_reported")[["New_cases", "New_deaths"]].sum().reset_index()
+        global_trend = df_filtered.groupby("Date_reported")[["New_cases", "New_deaths"]].sum().reset_index()
         fig_line = px.line(global_trend, x="Date_reported", y="New_cases",
                            title="Số ca nhiễm mới toàn cầu theo thời gian",
                            labels={"Date_reported": "Ngày", "New_cases": "Ca nhiễm mới"})
     else:
-        country_data = df[df["Country"] == selected_country]
+        country_data = df_filtered[df_filtered["Country"] == selected_country]
         fig_line = px.line(country_data, x="Date_reported", y="New_cases",
                            title=f"Số ca nhiễm mới tại {selected_country}",
                            labels={"Date_reported": "Ngày", "New_cases": "Ca nhiễm mới"},
@@ -148,14 +169,13 @@ with tab1:
 with tab2:
     if show_globe2d:
         st.subheader("🗺️ Bản đồ 2D COVID-19 theo quốc gia")
-        country_cases = df.groupby("Country", as_index=False)["New_cases"].sum()
         fig = px.choropleth(
-            country_cases,
+            latest_filtered,
             locations="Country",
             locationmode="country names",
-            color="New_cases",
+            color="Cumulative_cases",
             color_continuous_scale="Reds",
-            title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia",
+            title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (theo thời gian lọc)",
             projection="natural earth"
         )
         fig.update_layout(
@@ -169,11 +189,11 @@ with tab2:
     if show_globe3d:
         st.subheader("🌐 Bản đồ 3D (Globe)")
         fig_globe = go.Figure(go.Choropleth(
-            locations=latest['Country_code3'],
-            z=latest['Cases_per_million'],
-            text=latest['Country'] + "<br>" +
-                "Dân số: " + latest['Population'].astype(str) + "<br>" +
-                "Tổng ca nhiễm: " + latest['Cumulative_cases'].astype(str),
+            locations=latest_filtered['Country_code3'],
+            z=latest_filtered['Cases_per_million'],
+            text=latest_filtered['Country'] + "<br>" +
+                "Dân số: " + latest_filtered['Population'].astype(str) + "<br>" +
+                "Tổng ca nhiễm: " + latest_filtered['Cumulative_cases'].astype(str),
             colorscale='Reds',
             colorbar_title='Ca/1 triệu dân',
             marker_line_color='black',
@@ -190,8 +210,8 @@ with tab2:
 
 # --- TAB 3: Top quốc gia ---
 with tab3:
-    st.subheader("🏆 Top 10 quốc gia có tổng ca nhiễm cao nhất")
-    top10 = latest.nlargest(10, "Cumulative_cases")
+    st.subheader("🏆 Top 10 quốc gia có tổng ca nhiễm cao nhất (theo thời gian lọc)")
+    top10 = latest_filtered.nlargest(10, "Cumulative_cases")
     fig_top10 = px.bar(top10, x="Country", y="Cumulative_cases",
                        color="Cumulative_cases", color_continuous_scale="Reds",
                        labels={"Cumulative_cases": "Tổng ca nhiễm"},
@@ -200,9 +220,9 @@ with tab3:
 
 # --- TAB 4: Dữ liệu chi tiết ---
 with tab4:
-    st.subheader("📋 Dữ liệu chi tiết theo quốc gia")
+    st.subheader("📋 Dữ liệu chi tiết theo quốc gia (theo thời gian lọc)")
     st.dataframe(
-        latest[["Country", "Cumulative_cases", "Cumulative_deaths", "Cases_per_million", "Fatality_rate"]]
+        latest_filtered[["Country", "Cumulative_cases", "Cumulative_deaths", "Cases_per_million", "Fatality_rate"]]
         .sort_values(by="Cumulative_cases", ascending=False)
         .reset_index(drop=True)
     )
