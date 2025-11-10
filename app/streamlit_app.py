@@ -214,25 +214,18 @@ with tab2:
     st.markdown("#### 🗺️ Bản đồ 2D COVID-19 theo quốc gia")
     fig = px.choropleth(
         latest_filtered,
-        locations="Country_code3",
-        color=color_col,
+        locations="Country_code3",           # ISO3 code
+        color=color_col,                     # chọn theo radio
         hover_name="Country",
         color_continuous_scale="Reds",
         title=f"🌍 {map_metric} theo quốc gia (2D)",
         projection="natural earth"
     )
     fig.update_layout(
-        geo=dict(
-            showframe=False,
-            showcoastlines=True,
-            bgcolor="#0E1117",              # 🌑 nền bản đồ
-            coastlinecolor="lightgray"
-        ),
-        paper_bgcolor="#0E1117",             # 🌑 nền tổng thể
-        plot_bgcolor="#0E1117",
+        geo=dict(showframe=False, showcoastlines=True),
+        paper_bgcolor="#0E1117",
         font=dict(color="white", size=14),
-        title_x=0.5,
-        title_font=dict(color="white", size=18)
+        title_x=0.5
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -257,24 +250,19 @@ with tab2:
         showcoastlines=True,
         showocean=True,
         showland=True,
-        landcolor="#1E2B34",   # 💚 nền đất tối nhẹ
-        oceancolor="#0E1117",  # 🌊 biển trùng màu nền streamlit
-        coastlinecolor="lightgray",
-        countrycolor="gray"
+        landcolor="LightGreen",
+        oceancolor="LightBlue",
+        lataxis_showgrid=True,
+        lonaxis_showgrid=True,
     )
 
     fig_globe.update_layout(
         title_text=f"{map_metric} theo quốc gia (Interactive Globe)",
         margin={"r": 0, "t": 50, "l": 0, "b": 0},
-        height=600,
-        paper_bgcolor="#0E1117",
-        font=dict(color="white", size=14),
-        title_font=dict(color="white", size=18)
+        height=600
     )
 
     st.plotly_chart(fig_globe, use_container_width=True)
-
-
 
 # --- TAB 3: Tổng quan ---
 with tab3:
