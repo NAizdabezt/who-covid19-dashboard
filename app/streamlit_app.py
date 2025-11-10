@@ -102,9 +102,9 @@ st.caption(f"📆 Dữ liệu hiển thị: từ **{start_ts.date()}** đến **
 df = df_filtered.copy()
 
 
-# # Checkbox hiển thị bản đồ
-# show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
-# show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D", value=True)
+# Checkbox hiển thị bản đồ
+show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
+show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D", value=True)
 
 # Lọc dữ liệu chính bằng khoảng ngày mới
 df = df_filtered.copy()
@@ -178,25 +178,25 @@ with tab1:
 # --- TAB 2: Bản đồ ---
 with tab2:
     st.subheader("🗺️ Bản đồ COVID-19 theo quốc gia")
-    # if "Country_code" in latest_filtered.columns:
-    fig = px.choropleth(
-        latest_filtered,
-        locations="Country_code",
-        color="Cumulative_cases",
-        hover_name="Country",
-        color_continuous_scale="Reds",
-        title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (theo thời gian lọc)",
-        projection="natural earth"
-    )
-    fig.update_layout(
-        geo=dict(showframe=False, showcoastlines=True),
-        paper_bgcolor="#0E1117",
-        font=dict(color="white", size=14),
-        title_x=0.5
-    )
+    if "Country_code" in latest_filtered.columns:
+        fig = px.choropleth(
+            latest_filtered,
+            locations="Country_code",
+            color="Cumulative_cases",
+            hover_name="Country",
+            color_continuous_scale="Reds",
+            title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (theo thời gian lọc)",
+            projection="natural earth"
+        )
+        fig.update_layout(
+            geo=dict(showframe=False, showcoastlines=True),
+            paper_bgcolor="#0E1117",
+            font=dict(color="white", size=14),
+            title_x=0.5
+        )
     st.plotly_chart(fig, use_container_width=True)
-    # else:
-    #     st.warning("Không tìm thấy cột mã quốc gia để vẽ bản đồ.")
+    else:
+        st.warning("Không tìm thấy cột mã quốc gia để vẽ bản đồ.")
 
 # --- TAB 3: Top quốc gia ---
 with tab3:
