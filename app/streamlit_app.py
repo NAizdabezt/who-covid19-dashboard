@@ -249,17 +249,46 @@ with tab2:
     st.plotly_chart(fig_globe, use_container_width=True)
 
 
-# --- TAB 3: Top quốc gia ---
+# --- TAB 3: Tổng quan ---
 with tab3:
-    st.subheader("🏆 Top 10 quốc gia có tổng ca nhiễm cao nhất (theo thời gian lọc)")
-    top10 = latest_filtered.nlargest(10, "Cumulative_cases")
-    fig_top10 = px.bar(
-        top10, x="Country", y="Cumulative_cases",
-        color="Cumulative_cases", color_continuous_scale="Reds",
-        labels={"Cumulative_cases": "Tổng ca nhiễm"},
-        title="Top 10 quốc gia có tổng ca nhiễm cao nhất"
+    st.subheader("📊 Thống kê tổng quan")
+
+    # Top 10 quốc gia có số ca cao nhất
+    top_countries = latest.sort_values(by="Cumulative_cases", ascending=False).head(10)
+
+    st.markdown("### 🌍 Top 10 quốc gia có tổng ca nhiễm cao nhất")
+
+    fig_top = px.bar(
+        top_countries.sort_values("Cumulative_cases", ascending=True),
+        x="Cumulative_cases",
+        y="Country",
+        orientation="h",  # 👉 biểu đồ ngang
+        text="Cumulative_cases",
+        color="Cumulative_cases",
+        color_continuous_scale="Reds",
+        labels={"Cumulative_cases": "Tổng ca nhiễm", "Country": "Quốc gia"},
+        title="Top 10 quốc gia có tổng ca nhiễm COVID-19 cao nhất",
     )
-    st.plotly_chart(fig_top10, use_container_width=True)
+
+    fig_top.update_traces(
+        texttemplate="%{text:,}",  # Hiển thị số có dấu phẩy
+        textposition="outside",
+    )
+
+    fig_top.update_layout(
+        xaxis_title=None,
+        yaxis_title=None,
+        coloraxis_showscale=False,
+        height=500,
+        paper_bgcolor="#0E1117",
+        plot_bgcolor="#0E1117",
+        font=dict(color="white", size=14),
+        title=dict(x=0.5, font=dict(size=18)),
+        margin=dict(l=50, r=20, t=80, b=20)
+    )
+
+    st.plotly_chart(fig_top, use_container_width=True)
+
 
 # --- TAB 4: Dữ liệu chi tiết ---
 with tab4:
