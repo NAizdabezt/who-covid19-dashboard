@@ -115,8 +115,8 @@ st.caption(f"📆 Dữ liệu hiển thị: từ **{start_ts.date()}** đến **
 show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
 show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D", value=True)
 
-# Lọc dữ liệu theo ngày
-df = df[(df["Date_reported"] >= pd.Timestamp(start_date)) & (df["Date_reported"] <= pd.Timestamp(end_date))]
+# Lọc dữ liệu chính bằng khoảng ngày mới
+df = df_filtered.copy()
 
 # ===============================
 # 4️⃣ KPI Cards
