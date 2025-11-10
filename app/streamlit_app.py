@@ -113,6 +113,7 @@ df = df_filtered.copy()
 # ✅ Sau khi lọc theo thời gian xong
 # ===============================
 # Tạo bảng latest_filtered: tổng ca và tử vong trong khoảng đã lọc
+st.write("🧾 Các cột hiện có trong df_filtered:", df_filtered.columns.tolist())
 latest_filtered = (
     df_filtered.groupby(["Country", "Country_code3"], as_index=False)
     .agg({
