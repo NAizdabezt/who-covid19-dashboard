@@ -185,55 +185,50 @@ with tab1:
     st.plotly_chart(fig_line, use_container_width=True)
 
 # --- TAB 2: Bản đồ ---
-
 with tab2:
     st.subheader("🗺️ Bản đồ COVID-19 theo quốc gia")
 
-    # Đảm bảo có Country_code3 (được giữ nguyên từ latest)
-    if "Country_code3" not in latest_filtered.columns:
-        st.warning("⚠️ Thiếu mã quốc gia ISO3 trong dữ liệu. Vui lòng kiểm tra file latest.")
-    else:
-        # --- Bản đồ 2D ---
-        fig = px.choropleth(
-            latest_filtered,
-            locations="Country_code3",   # Dùng mã ISO3 có sẵn
-            color="Cumulative_cases",
-            hover_name="Country",
-            color_continuous_scale="Reds",
-            title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (theo thời gian lọc)",
-            projection="natural earth"
-        )
-        fig.update_layout(
-            geo=dict(showframe=False, showcoastlines=True),
-            paper_bgcolor="#0E1117",
-            font=dict(color="white", size=14),
-            title_x=0.5
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    # --- Bản đồ 2D ---
+    fig = px.choropleth(
+        latest_filtered,
+        locations="Country_code3",  # Dùng mã ISO3 có sẵn
+        color="Cumulative_cases",
+        hover_name="Country",
+        color_continuous_scale="Reds",
+        title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (theo thời gian lọc)",
+        projection="natural earth"
+    )
+    fig.update_layout(
+        geo=dict(showframe=False, showcoastlines=True),
+        paper_bgcolor="#0E1117",
+        font=dict(color="white", size=14),
+        title_x=0.5
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
-        # --- Bản đồ 3D ---
-        st.subheader("🌐 Bản đồ 3D (Globe)")
-        fig_globe = go.Figure(go.Choropleth(
-            locations=latest_filtered["Country_code3"],
-            z=latest_filtered["Cumulative_cases"],
-            text=latest_filtered["Country"] + "<br>" +
-                 "Tổng ca nhiễm: " + latest_filtered["Cumulative_cases"].astype(str),
-            colorscale="Reds",
-            colorbar_title="Ca nhiễm",
-            marker_line_color="black",
-            marker_line_width=0.5
-        ))
-        fig_globe.update_geos(
-            projection_type="orthographic",
-            showcountries=True, showcoastlines=True,
-            showocean=True, showland=True,
-            landcolor="LightGreen", oceancolor="LightBlue"
-        )
-        fig_globe.update_layout(
-            margin={"r": 0, "t": 0, "l": 0, "b": 0},
-            height=600
-        )
-        st.plotly_chart(fig_globe, use_container_width=True)
+    # --- Bản đồ 3D ---
+    st.subheader("🌐 Bản đồ 3D (Globe)")
+    fig_globe = go.Figure(go.Choropleth(
+        locations=latest_filtered['Country_code3'],
+        z=latest_filtered['Cumulative_cases'],
+        text=latest_filtered['Country'] + "<br>" +
+             "Tổng ca nhiễm: " + latest_filtered['Cumulative_cases'].astype(str),
+        colorscale='Reds',
+        colorbar_title='Ca nhiễm',
+        marker_line_color='black',
+        marker_line_width=0.5
+    ))
+    fig_globe.update_geos(
+        projection_type="orthographic",
+        showcountries=True, showcoastlines=True,
+        showocean=True, showland=True,
+        landcolor="LightGreen", oceancolor="LightBlue"
+    )
+    fig_globe.update_layout(
+        margin={"r":0,"t":0,"l":0,"b":0},
+        height=600
+    )
+    st.plotly_chart(fig_globe, use_container_width=True)
 
 # --- TAB 3: Top quốc gia ---
 with tab3:
