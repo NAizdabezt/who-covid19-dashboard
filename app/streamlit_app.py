@@ -65,7 +65,6 @@ df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
 min_ts = df["Date_reported"].min()
 max_ts = df["Date_reported"].max()
 
-st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_ts.date()}** đến **{max_ts.date()}**")
 
 st.sidebar.subheader("📅 Khoảng thời gian")
 
