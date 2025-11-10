@@ -196,15 +196,29 @@ with tab2:
             how="left"
         )
 
+    # --- Bộ chọn loại dữ liệu hiển thị ---
+    map_metric = st.radio(
+        "Chọn loại dữ liệu hiển thị:",
+        ("Tổng số ca nhiễm", "Tỷ lệ ca/1 triệu dân"),
+        horizontal=True,
+    )
+
+    color_col = (
+        "Cases_per_million"
+        if map_metric == "Tỷ lệ ca/1 triệu dân"
+        else "Cumulative_cases"
+    )
+    color_title = "Ca/1 triệu dân" if color_col == "Cases_per_million" else "Ca nhiễm"
+
     # --- Bản đồ 2D ---
     st.markdown("#### 🗺️ Bản đồ 2D COVID-19 theo quốc gia")
     fig = px.choropleth(
         latest_filtered,
-        locations="Country_code3",                # ISO3 code
-        color="Cumulative_cases",
+        locations="Country_code3",           # ISO3 code
+        color=color_col,                     # chọn theo radio
         hover_name="Country",
         color_continuous_scale="Reds",
-        title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (theo thời gian lọc)",
+        title=f"🌍 {map_metric} theo quốc gia (2D)",
         projection="natural earth"
     )
     fig.update_layout(
@@ -218,13 +232,15 @@ with tab2:
     # --- Bản đồ 3D ---
     st.markdown("#### 🌐 Bản đồ 3D (Interactive Globe)")
     fig_globe = go.Figure(go.Choropleth(
-        locations=latest_filtered['Country_code3'],
-        z=latest_filtered['Cumulative_cases'],  # có thể đổi sang Cases_per_million nếu muốn
-        text=latest_filtered['Country'] + "<br>" +
-             "Tổng ca nhiễm: " + latest_filtered['Cumulative_cases'].astype(str),
-        colorscale='Reds',
-        colorbar_title='Ca nhiễm',
-        marker_line_color='black',
+        locations=latest_filtered["Country_code3"],
+        z=latest_filtered[color_col],
+        text=(
+            latest_filtered["Country"] + "<br>" +
+            f"{color_title}: " + latest_filtered[color_col].round(2).astype(str)
+        ),
+        colorscale="Reds",
+        colorbar_title=color_title,
+        marker_line_color="black",
         marker_line_width=0.5
     ))
 
@@ -241,7 +257,7 @@ with tab2:
     )
 
     fig_globe.update_layout(
-        title_text='Tổng số ca COVID-19 theo quốc gia (Interactive Globe)',
+        title_text=f"{map_metric} theo quốc gia (Interactive Globe)",
         margin={"r": 0, "t": 50, "l": 0, "b": 0},
         height=600
     )
