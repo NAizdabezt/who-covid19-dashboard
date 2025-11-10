@@ -33,27 +33,20 @@ df, latest = load_data()
 # 3️⃣ Sidebar – bộ lọc
 # ===============================
 st.sidebar.header("🎚️ Bộ lọc dữ liệu")
+
 countries = sorted(df["Country"].unique())
-selected_country = st.sidebar.selectbox("🌎 Chọn quốc gia", ["Toàn cầu"] + countries)
+selected_country = st.sidebar.selectbox("Chọn quốc gia", ["Toàn cầu"] + countries)
 
-# --- Bộ lọc thời gian (sửa lại an toàn) ---
-# đảm bảo Date_reported là datetime
-df['Date_reported'] = pd.to_datetime(df['Date_reported'], errors='coerce')
+# Lấy khoảng ngày có trong dữ liệu
+min_ts = pd.to_datetime(df["Date_reported"].min())
+max_ts = pd.to_datetime(df["Date_reported"].max())
+min_date = min_ts.date()
+max_date = max_ts.date()
 
-# tính min/max từ toàn bộ df (dùng .date() để lấy datetime.date)
-min_ts = df['Date_reported'].min()
-max_ts = df['Date_reported'].max()
+# Hiển thị chú thích
+st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_date}** đến **{max_date}**.")
 
-# nếu thiếu dữ liệu an toàn xử lý
-if pd.isna(min_ts) or pd.isna(max_ts):
-    st.sidebar.warning("Không có dữ liệu ngày hợp lệ trong dataset.")
-    # fallback: đặt ngày hiện tại
-    min_date = max_date = pd.Timestamp.today().date()
-else:
-    min_date = min_ts.date()
-    max_date = max_ts.date()
-
-# Hiển thị date_input với giá trị kiểu datetime.date
+# Bộ lọc theo ngày
 start_date, end_date = st.sidebar.date_input(
     "📆 Khoảng thời gian",
     value=[min_date, max_date],
@@ -61,24 +54,20 @@ start_date, end_date = st.sidebar.date_input(
     max_value=max_date
 )
 
-# Nếu người dùng lỡ chọn 1 giá trị đơn lẻ (date_input có thể trả về single date nếu only one)
-if isinstance(start_date, tuple) or isinstance(start_date, list):
-    # đôi khi colab/streamlit trả tuple — chuẩn hóa
-    start_date, end_date = start_date
+# Tự động co lại nếu người dùng chọn ngoài phạm vi
+if start_date < min_date:
+    st.sidebar.warning(f"⚠️ Ngày bắt đầu nhỏ hơn dữ liệu — hệ thống tự điều chỉnh về {min_date}.")
+    start_date = min_date
+if end_date > max_date:
+    st.sidebar.warning(f"⚠️ Dữ liệu chỉ có đến {max_date}, hệ thống sẽ tự điều chỉnh.")
+    end_date = max_date
 
-# đảm bảo start_date <= end_date (nếu không, hoán đổi hoặc cảnh báo)
-if start_date > end_date:
-    start_date, end_date = end_date, start_date
-
-# Chuyển về pandas timestamp để lọc df
-start_ts = pd.Timestamp(start_date)
-end_ts = pd.Timestamp(end_date) + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)  # bao gồm cả ngày end_date
-
-# Lọc dữ liệu an toàn theo khoảng
-df = df[(df['Date_reported'] >= start_ts) & (df['Date_reported'] <= end_ts)]
-
+# Checkbox hiển thị bản đồ
 show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
-show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D (Globe)", value=False)
+show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D", value=True)
+
+# Lọc dữ liệu theo ngày
+df = df[(df["Date_reported"] >= pd.Timestamp(start_date)) & (df["Date_reported"] <= pd.Timestamp(end_date))]
 
 # ===============================
 # 4️⃣ KPI Cards
