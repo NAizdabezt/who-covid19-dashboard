@@ -71,6 +71,26 @@ else:
 
 st.plotly_chart(fig_line, use_container_width=True)
 
+# Vẽ bản đồ 2D thế giới
+fig = px.choropleth(
+    country_cases,
+    locations="Country",
+    locationmode="country names",
+    color="New_cases",
+    color_continuous_scale="Reds",
+    title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (2020–2023)",
+    projection="natural earth"  # kiểu bản đồ truyền thống
+)
+
+fig.update_layout(
+    geo=dict(showframe=False, showcoastlines=True),
+    paper_bgcolor="#0E1117",
+    font=dict(color="white", size=14),
+    title_x=0.5
+)
+
+fig.show()
+
 # --- Globe 3D ---
 if show_globe:
     st.subheader("🌍 Bản đồ nhiệt COVID-19 (Ca/1 triệu dân)")
