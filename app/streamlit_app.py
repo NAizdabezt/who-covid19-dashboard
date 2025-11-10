@@ -35,7 +35,8 @@ df, latest = load_data()
 st.sidebar.header("🎚️ Bộ lọc dữ liệu")
 countries = sorted(df["Country"].unique())
 selected_country = st.sidebar.selectbox("Chọn quốc gia", ["Toàn cầu"] + countries)
-show_globe = st.sidebar.checkbox("Hiển thị bản đồ 3D (Globe)", value=True)
+show_globe2d = st.sidebar.checkbox("Hiển thị bản đồ 2D (Globe)", value=True)
+show_globe3d = st.sidebar.checkbox("Hiển thị bản đồ 3D (Globe)", value=True)
 
 # ===============================
 # 4️⃣ KPI Cards
@@ -72,30 +73,31 @@ else:
 st.plotly_chart(fig_line, use_container_width=True)
 
 # Vẽ bản đồ 2D thế giới
-st.subheader("🗺️ Bản đồ 2D COVID-19 theo quốc gia")
-# Gom tổng ca nhiễm theo quốc gia
-country_cases = df.groupby("Country", as_index=False)["New_cases"].sum()
-
-fig = px.choropleth(
-    country_cases,
-    locations="Country",
-    locationmode="country names",
-    color="New_cases",
-    color_continuous_scale="Reds",
-    title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (2020–2023)",
-    projection="natural earth"
-)
-
-fig.update_layout(
-    geo=dict(showframe=False, showcoastlines=True),
-    paper_bgcolor="#0E1117",
-    font=dict(color="white", size=14),
-    title_x=0.5
-)
-
-st.plotly_chart(fig, use_container_width=True)
+if show_globe2d:
+    st.subheader("🗺️ Bản đồ 2D COVID-19 theo quốc gia")
+    # Gom tổng ca nhiễm theo quốc gia
+    country_cases = df.groupby("Country", as_index=False)["New_cases"].sum()
+    
+    fig = px.choropleth(
+        country_cases,
+        locations="Country",
+        locationmode="country names",
+        color="New_cases",
+        color_continuous_scale="Reds",
+        title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (2020–2023)",
+        projection="natural earth"
+    )
+    
+    fig.update_layout(
+        geo=dict(showframe=False, showcoastlines=True),
+        paper_bgcolor="#0E1117",
+        font=dict(color="white", size=14),
+        title_x=0.5
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 # --- Globe 3D ---
-if show_globe:
+if show_globe3d:
     st.subheader("🌍 Bản đồ nhiệt COVID-19 (Ca/1 triệu dân)")
     fig_globe = go.Figure(go.Choropleth(
         locations=latest['Country_code3'],
