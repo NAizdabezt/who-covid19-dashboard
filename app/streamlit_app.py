@@ -67,42 +67,49 @@ max_ts = pd.to_datetime(df["Date_reported"].max())
 # # hiển thị chú thích khoảng dữ liệu
 # st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_ts.date()}** đến **{max_ts.date()}**")
 
+# ===============================
+# 🗓️ Bộ lọc theo thời gian (phiên bản fix hoàn toàn lỗi 1 ngày)
+# ===============================
+
+# đảm bảo cột Date_reported là datetime
+df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
+
+min_ts = df["Date_reported"].min()
+max_ts = df["Date_reported"].max()
+
+st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_ts.date()}** đến **{max_ts.date()}**")
+
 st.sidebar.subheader("📅 Khoảng thời gian")
+
+# Streamlit có thể trả về 1 ngày (date) hoặc 2 ngày (list)
 date_input = st.sidebar.date_input(
     "Chọn khoảng thời gian",
-    value=[min_ts.date(), max_ts.date()]
+    value=(min_ts.date(), max_ts.date())
 )
 
-# Chuẩn hóa output của date_input thành start_date / end_date (pandas Timestamp)
+# ✅ Chuẩn hóa để luôn có start_ts và end_ts dạng scalar Timestamp
 if isinstance(date_input, (list, tuple)) and len(date_input) == 2:
-    start_date, end_date = date_input
+    start_ts = pd.to_datetime(date_input[0])
+    end_ts = pd.to_datetime(date_input[1])
 else:
-    # người dùng có thể nhấn 1 ngày -> trả về single date
-    start_date = date_input
-    end_date = date_input
+    # Người dùng chọn 1 ngày duy nhất
+    start_ts = pd.to_datetime(date_input)
+    end_ts = start_ts
 
-# Ép về pandas.Timestamp (an toàn với datetime.date / pd.Timestamp / np.datetime64)
-start_ts = pd.to_datetime(start_date)
-end_ts = pd.to_datetime(end_date)
-
-# Nếu user chọn start > end thì hoán đổi cho hợp lý
+# ✅ Đảm bảo thứ tự hợp lý
 if start_ts > end_ts:
-    tmp = start_ts
-    start_ts = end_ts
-    end_ts = tmp
+    start_ts, end_ts = end_ts, start_ts
 
-# Nếu user chọn ngoài phạm vi dữ liệu, tự động clamp và cảnh báo
+# ✅ Clamp trong khoảng dữ liệu
 if start_ts < min_ts:
-    st.sidebar.warning(f"⚠️ Ngày bắt đầu nhỏ hơn dữ liệu. Tự điều chỉnh về {min_ts.date()}.")
     start_ts = min_ts
 if end_ts > max_ts:
-    st.sidebar.warning(f"⚠️ Ngày kết thúc lớn hơn dữ liệu. Tự điều chỉnh về {max_ts.date()}.")
     end_ts = max_ts
 
-# Dùng df_filtered cho phần hiển thị; không ghi đè df gốc để còn dùng latest (nếu cần)
+# ✅ Lọc dữ liệu
 df_filtered = df[(df["Date_reported"] >= start_ts) & (df["Date_reported"] <= end_ts)]
 
-st.caption(f"📅 Hiển thị dữ liệu từ **{start_ts.date()}** đến **{end_ts.date()}**")
+st.caption(f"📆 Dữ liệu hiển thị: từ **{start_ts.date()}** đến **{end_ts.date()}**")
 
 # Checkbox hiển thị bản đồ
 show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
