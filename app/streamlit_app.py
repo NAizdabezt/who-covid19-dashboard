@@ -187,6 +187,9 @@ with tab1:
 # --- TAB 2: Bản đồ ---
 with tab2:
     st.subheader("🗺️ Bản đồ COVID-19 theo quốc gia")
+    missing_iso = latest_filtered[~latest_filtered["Country_code3"].isin(px.data.gapminder()["iso_alpha"])]
+    st.write("⚠️ Các quốc gia/vùng không được Plotly hỗ trợ:", missing_iso["Country"].tolist())
+
 
     # --- Bản đồ 2D ---
     fig = px.choropleth(
