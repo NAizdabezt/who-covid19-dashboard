@@ -102,9 +102,6 @@ if end_ts > max_ts:
 # Dùng df_filtered cho phần hiển thị; không ghi đè df gốc để còn dùng latest (nếu cần)
 df_filtered = df[(df["Date_reported"] >= start_ts) & (df["Date_reported"] <= end_ts)]
 
-st.caption(f"📅 Hiển thị dữ liệu từ **{start_ts.date()}** đến **{end_ts.date()}**")
-
-
 # Checkbox hiển thị bản đồ
 show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
 show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D", value=True)
