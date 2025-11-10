@@ -64,8 +64,8 @@ df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
 min_ts = pd.to_datetime(df["Date_reported"].min())
 max_ts = pd.to_datetime(df["Date_reported"].max())
 
-# hiển thị chú thích khoảng dữ liệu
-st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_ts.date()}** đến **{max_ts.date()}**")
+# # hiển thị chú thích khoảng dữ liệu
+# st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_ts.date()}** đến **{max_ts.date()}**")
 
 st.sidebar.subheader("📅 Khoảng thời gian")
 date_input = st.sidebar.date_input(
@@ -101,6 +101,8 @@ if end_ts > max_ts:
 
 # Dùng df_filtered cho phần hiển thị; không ghi đè df gốc để còn dùng latest (nếu cần)
 df_filtered = df[(df["Date_reported"] >= start_ts) & (df["Date_reported"] <= end_ts)]
+
+st.caption(f"📅 Hiển thị dữ liệu từ **{start_ts.date()}** đến **{end_ts.date()}**")
 
 # Checkbox hiển thị bản đồ
 show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
