@@ -23,13 +23,19 @@ Dữ liệu cập nhật và trực quan hóa theo quốc gia từ **World Healt
 # ===============================
 @st.cache_data
 def load_data():
-    df = pd.read_csv("data/df_clean.csv.gz")
-    latest = pd.read_csv("data/latest.csv.gz")
-    
-    # Chuyển cột ngày về dạng datetime
-    df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
-    
-    return df, latest
+    try:
+        df = pd.read_csv("data/df_clean.csv.gz")
+        latest = pd.read_csv("data/latest.csv.gz")
+        df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
+        return df, latest
+    except Exception as e:
+        st.error(f"Lỗi khi tải dữ liệu: {e}")
+        return None, None
+
+df, latest = load_data()
+
+if df is None or latest is None:
+    st.stop()  # Dừng app nếu chưa có dữ liệu
 
 # ===============================
 # 3️⃣ Sidebar – bộ lọc
