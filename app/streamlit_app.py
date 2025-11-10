@@ -34,9 +34,20 @@ df, latest = load_data()
 # ===============================
 st.sidebar.header("🎚️ Bộ lọc dữ liệu")
 countries = sorted(df["Country"].unique())
-selected_country = st.sidebar.selectbox("Chọn quốc gia", ["Toàn cầu"] + countries)
-show_globe2d = st.sidebar.checkbox("Hiển thị bản đồ 2D (Globe)", value=True)
-show_globe3d = st.sidebar.checkbox("Hiển thị bản đồ 3D (Globe)", value=True)
+selected_country = st.sidebar.selectbox("🌎 Chọn quốc gia", ["Toàn cầu"] + countries)
+
+# Bộ lọc thời gian
+min_date, max_date = pd.to_datetime(df["Date_reported"].min()), pd.to_datetime(df["Date_reported"].max())
+start_date, end_date = st.sidebar.date_input(
+    "📆 Khoảng thời gian", [min_date, max_date],
+    min_value=min_date, max_value=max_date
+)
+
+df["Date_reported"] = pd.to_datetime(df["Date_reported"])
+df = df[(df["Date_reported"] >= pd.to_datetime(start_date)) & (df["Date_reported"] <= pd.to_datetime(end_date))]
+
+show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
+show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D (Globe)", value=False)
 
 # ===============================
 # 4️⃣ KPI Cards
@@ -53,80 +64,88 @@ col3.metric("📊 Tỷ lệ tử vong (%)", f"{fatality_rate:.2f}")
 col4.metric("🌎 Quốc gia bị ảnh hưởng", f"{affected_countries}")
 
 # ===============================
-# 5️⃣ Phần nội dung chính
+# 5️⃣ Tabs cho phần nội dung chính
 # ===============================
+tab1, tab2, tab3, tab4 = st.tabs(["📈 Xu hướng ca nhiễm", "🗺️ Bản đồ thế giới", "🏆 Top quốc gia", "📋 Dữ liệu chi tiết"])
 
-# --- Biểu đồ theo thời gian ---
-st.subheader("📈 Xu hướng ca nhiễm theo thời gian")
-if selected_country == "Toàn cầu":
-    global_trend = df.groupby("Date_reported")[["New_cases", "New_deaths"]].sum().reset_index()
-    fig_line = px.line(global_trend, x="Date_reported", y="New_cases",
-                       title="Số ca nhiễm mới toàn cầu theo thời gian",
-                       labels={"Date_reported": "Ngày", "New_cases": "Ca nhiễm mới"})
-else:
-    country_data = df[df["Country"] == selected_country]
-    fig_line = px.line(country_data, x="Date_reported", y="New_cases",
-                       title=f"Số ca nhiễm mới tại {selected_country}",
-                       labels={"Date_reported": "Ngày", "New_cases": "Ca nhiễm mới"},
-                       color_discrete_sequence=["#E74C3C"])
+# --- TAB 1: Xu hướng theo thời gian ---
+with tab1:
+    st.subheader("📈 Xu hướng ca nhiễm theo thời gian")
+    if selected_country == "Toàn cầu":
+        global_trend = df.groupby("Date_reported")[["New_cases", "New_deaths"]].sum().reset_index()
+        fig_line = px.line(global_trend, x="Date_reported", y="New_cases",
+                           title="Số ca nhiễm mới toàn cầu theo thời gian",
+                           labels={"Date_reported": "Ngày", "New_cases": "Ca nhiễm mới"})
+    else:
+        country_data = df[df["Country"] == selected_country]
+        fig_line = px.line(country_data, x="Date_reported", y="New_cases",
+                           title=f"Số ca nhiễm mới tại {selected_country}",
+                           labels={"Date_reported": "Ngày", "New_cases": "Ca nhiễm mới"},
+                           color_discrete_sequence=["#E74C3C"])
+    st.plotly_chart(fig_line, use_container_width=True)
 
-st.plotly_chart(fig_line, use_container_width=True)
+# --- TAB 2: Bản đồ ---
+with tab2:
+    if show_globe2d:
+        st.subheader("🗺️ Bản đồ 2D COVID-19 theo quốc gia")
+        country_cases = df.groupby("Country", as_index=False)["New_cases"].sum()
+        fig = px.choropleth(
+            country_cases,
+            locations="Country",
+            locationmode="country names",
+            color="New_cases",
+            color_continuous_scale="Reds",
+            title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia",
+            projection="natural earth"
+        )
+        fig.update_layout(
+            geo=dict(showframe=False, showcoastlines=True),
+            paper_bgcolor="#0E1117",
+            font=dict(color="white", size=14),
+            title_x=0.5
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-# Vẽ bản đồ 2D thế giới
-if show_globe2d:
-    st.subheader("🗺️ Bản đồ 2D COVID-19 theo quốc gia")
-    # Gom tổng ca nhiễm theo quốc gia
-    country_cases = df.groupby("Country", as_index=False)["New_cases"].sum()
-    
-    fig = px.choropleth(
-        country_cases,
-        locations="Country",
-        locationmode="country names",
-        color="New_cases",
-        color_continuous_scale="Reds",
-        title="🌍 Tổng số ca nhiễm COVID-19 theo quốc gia (2020–2023)",
-        projection="natural earth"
+    if show_globe3d:
+        st.subheader("🌐 Bản đồ 3D (Globe)")
+        fig_globe = go.Figure(go.Choropleth(
+            locations=latest['Country_code3'],
+            z=latest['Cases_per_million'],
+            text=latest['Country'] + "<br>" +
+                "Dân số: " + latest['Population'].astype(str) + "<br>" +
+                "Tổng ca nhiễm: " + latest['Cumulative_cases'].astype(str),
+            colorscale='Reds',
+            colorbar_title='Ca/1 triệu dân',
+            marker_line_color='black',
+            marker_line_width=0.5
+        ))
+        fig_globe.update_geos(
+            projection_type="orthographic",
+            showcountries=True, showcoastlines=True,
+            showocean=True, showland=True,
+            landcolor="LightGreen", oceancolor="LightBlue"
+        )
+        fig_globe.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=600)
+        st.plotly_chart(fig_globe, use_container_width=True)
+
+# --- TAB 3: Top quốc gia ---
+with tab3:
+    st.subheader("🏆 Top 10 quốc gia có tổng ca nhiễm cao nhất")
+    top10 = latest.nlargest(10, "Cumulative_cases")
+    fig_top10 = px.bar(top10, x="Country", y="Cumulative_cases",
+                       color="Cumulative_cases", color_continuous_scale="Reds",
+                       labels={"Cumulative_cases": "Tổng ca nhiễm"},
+                       title="Top 10 quốc gia có tổng ca nhiễm cao nhất")
+    st.plotly_chart(fig_top10, use_container_width=True)
+
+# --- TAB 4: Dữ liệu chi tiết ---
+with tab4:
+    st.subheader("📋 Dữ liệu chi tiết theo quốc gia")
+    st.dataframe(
+        latest[["Country", "Cumulative_cases", "Cumulative_deaths", "Cases_per_million", "Fatality_rate"]]
+        .sort_values(by="Cumulative_cases", ascending=False)
+        .reset_index(drop=True)
     )
-    
-    fig.update_layout(
-        geo=dict(showframe=False, showcoastlines=True),
-        paper_bgcolor="#0E1117",
-        font=dict(color="white", size=14),
-        title_x=0.5
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-# --- Globe 3D ---
-if show_globe3d:
-    st.subheader("🌍 Bản đồ nhiệt COVID-19 (Ca/1 triệu dân)")
-    fig_globe = go.Figure(go.Choropleth(
-        locations=latest['Country_code3'],
-        z=latest['Cases_per_million'],
-        text=latest['Country'] + "<br>" +
-             "Dân số: " + latest['Population'].astype(str) + "<br>" +
-             "Tổng ca nhiễm: " + latest['Cumulative_cases'].astype(str),
-        colorscale='Reds',
-        colorbar_title='Ca/1 triệu dân',
-        marker_line_color='black',
-        marker_line_width=0.5
-    ))
-
-    fig_globe.update_geos(
-        projection_type="orthographic",
-        showcountries=True,
-        showcoastlines=True,
-        showocean=True,
-        showland=True,
-        landcolor="LightGreen",
-        oceancolor="LightBlue"
-    )
-
-    fig_globe.update_layout(
-        margin={"r":0,"t":0,"l":0,"b":0},
-        height=600
-    )
-
-    st.plotly_chart(fig_globe, use_container_width=True)
 
 # ===============================
 # 6️⃣ Footer
