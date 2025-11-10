@@ -55,34 +55,31 @@ max_date = max_ts.date()
 st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_date}** đến **{max_date}**.")
 
 # ===============================
-# 🗓️ Bộ lọc theo thời gian – chống lỗi khi chọn 1 ngày
+# 🗓️ Bộ lọc theo thời gian (ổn định, không lỗi outside range)
 # ===============================
-date_input = st.sidebar.date_input(
+min_date = df["Date_reported"].min()
+max_date = df["Date_reported"].max()
+
+st.sidebar.subheader("📅 Khoảng thời gian")
+start_date, end_date = st.sidebar.date_input(
     "Chọn khoảng thời gian",
     value=[min_date, max_date]
 )
 
-# 🔧 Đảm bảo luôn có start_date và end_date
-if isinstance(date_input, list) and len(date_input) == 2:
-    start_date, end_date = date_input
-else:
-    start_date = date_input
-    end_date = date_input  # nếu chọn 1 ngày, dùng cùng ngày cho start & end
-
+# ✅ Nếu người dùng chọn ngoài range, tự động điều chỉnh lại
 start_date = pd.to_datetime(start_date)
 end_date = pd.to_datetime(end_date)
 
-# Giới hạn trong khoảng dữ liệu
-start_date = max(start_date, min_date)
-end_date = min(end_date, max_date)
+if start_date < min_date:
+    start_date = min_date
+if end_date > max_date:
+    end_date = max_date
 
-# ✅ Lọc dữ liệu an toàn
+# ✅ Lọc dữ liệu an toàn theo khoảng ngày
 df_filtered = df[
     (df["Date_reported"] >= start_date) &
     (df["Date_reported"] <= end_date)
 ]
-
-st.caption(f"Hiển thị dữ liệu từ **{start_date.date()}** đến **{end_date.date()}**")
 
 # Checkbox hiển thị bản đồ
 show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
