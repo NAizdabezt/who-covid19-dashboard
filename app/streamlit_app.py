@@ -194,7 +194,7 @@ with tab2:
             font=dict(color="white", size=14),
             title_x=0.5
         )
-    st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Không tìm thấy cột mã quốc gia để vẽ bản đồ.")
 
