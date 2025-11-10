@@ -115,7 +115,7 @@ df = df_filtered.copy()
 # Tạo bảng latest_filtered: tổng ca và tử vong trong khoảng đã lọc
 st.write("🧾 Các cột hiện có trong df_filtered:", df_filtered.columns.tolist())
 latest_filtered = (
-    df_filtered.groupby(["Country", "Country_code3"], as_index=False)
+    df_filtered.groupby(["Country", "Country_code"], as_index=False)
     .agg({
         "New_cases": "sum",
         "New_deaths": "sum",
