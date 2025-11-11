@@ -362,8 +362,6 @@ with tab4:
         .reset_index(drop=True)
     )
 with tab5:
-    # --- TAB 3: Phân tích quốc gia ---
-with tab3:
     st.subheader("📊 Phân tích Top quốc gia COVID-19")
 
     # Thêm cột tỷ lệ tử vong (%)
