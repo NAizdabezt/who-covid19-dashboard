@@ -157,11 +157,12 @@ col4.metric("🌎 Quốc gia bị ảnh hưởng", f"{affected_countries}")
 # ===============================
 # 5️⃣ Tabs cho phần nội dung chính
 # ===============================
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📈 Xu hướng ca nhiễm",
     "🗺️ Bản đồ thế giới",
     "🏆 Top quốc gia",
-    "📋 Dữ liệu chi tiết"
+    "📋 Dữ liệu chi tiết",
+    "🏆 Top quốc gia"
 ])
 
 # --- TAB 1: Xu hướng theo thời gian ---
