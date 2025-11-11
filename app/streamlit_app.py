@@ -398,6 +398,8 @@ with tab5:
         metric_col = "Cases_per_million"
         title = "🌎 Top 10 quốc gia có ca nhiễm trên 1 triệu dân cao nhất"
         color_scale = "Reds"
+        
+    latest_filtered[metric_col] = pd.to_numeric(latest_filtered[metric_col], errors="coerce")
 
     # Lấy top 10 quốc gia theo lựa chọn
     top_countries = latest_filtered.nlargest(10, metric_col)
@@ -419,9 +421,8 @@ with tab5:
 
     fig_top.update_traces(
         texttemplate="%{text:,.2f}" if "rate" in metric_col.lower() else "%{text:,}",
-        textposition="outside",
+        textposition="outside", insidetextanchor="start", cliponaxis=False
     )
-    fig_top.update_traces(textposition="outside", insidetextanchor="start", cliponaxis=False)
 
 
     fig_top.update_layout(
