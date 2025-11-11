@@ -421,6 +421,8 @@ with tab5:
         texttemplate="%{text:,.2f}" if "rate" in metric_col.lower() else "%{text:,}",
         textposition="outside",
     )
+    fig_top.update_traces(textposition="outside", insidetextanchor="start", cliponaxis=False)
+
 
     fig_top.update_layout(
         xaxis_title=None,
