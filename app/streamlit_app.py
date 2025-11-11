@@ -431,7 +431,7 @@ with tab5:
         plot_bgcolor="#0E1117",
         font=dict(color="white", size=14),
         title=dict(x=0.5, font=dict(size=18)),
-        margin=dict(l=50, r=20, t=80, b=20)
+        margin=dict(l=50, r=80, t=80, b=20)
     )
 
     st.plotly_chart(fig_top, use_container_width=True)
