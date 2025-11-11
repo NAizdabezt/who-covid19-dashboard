@@ -361,6 +361,82 @@ with tab4:
         .sort_values(by="Cumulative_cases", ascending=False)
         .reset_index(drop=True)
     )
+with tab5:
+    # --- TAB 3: Phân tích quốc gia ---
+with tab3:
+    st.subheader("📊 Phân tích Top quốc gia COVID-19")
+
+    # Thêm cột tỷ lệ tử vong (%)
+    latest_filtered["Death_rate"] = (
+        latest_filtered["Cumulative_deaths"] / latest_filtered["Cumulative_cases"].replace(0, None)
+    ) * 100
+
+    # Dropdown chọn loại thống kê
+    option = st.selectbox(
+        "Chọn loại thống kê hiển thị:",
+        (
+            "Tổng ca nhiễm cao nhất",
+            "Tổng ca tử vong cao nhất",
+            "Tỷ lệ tử vong cao nhất (%)",
+            "Ca nhiễm trên 1 triệu dân cao nhất",
+        )
+    )
+
+    # Xác định cột dữ liệu tương ứng
+    if option == "Tổng ca nhiễm cao nhất":
+        metric_col = "Cumulative_cases"
+        title = "🌍 Top 10 quốc gia có tổng ca nhiễm COVID-19 cao nhất"
+        color_scale = "Reds"
+    elif option == "Tổng ca tử vong cao nhất":
+        metric_col = "Cumulative_deaths"
+        title = "⚰️ Top 10 quốc gia có tổng ca tử vong COVID-19 cao nhất"
+        color_scale = "OrRd"
+    elif option == "Tỷ lệ tử vong cao nhất (%)":
+        metric_col = "Death_rate"
+        title = "💀 Top 10 quốc gia có tỷ lệ tử vong cao nhất (%)"
+        color_scale = "Peach"
+    else:
+        metric_col = "Cases_per_million"
+        title = "🌎 Top 10 quốc gia có ca nhiễm trên 1 triệu dân cao nhất"
+        color_scale = "Reds"
+
+    # Lấy top 10 quốc gia theo lựa chọn
+    top_countries = latest_filtered.nlargest(10, metric_col)
+
+    # --- Vẽ biểu đồ ---
+    st.markdown(f"### {title}")
+
+    fig_top = px.bar(
+        top_countries.sort_values(metric_col, ascending=True),
+        x=metric_col,
+        y="Country",
+        orientation="h",
+        text=metric_col,
+        color=metric_col,
+        color_continuous_scale=color_scale,
+        labels={metric_col: title, "Country": "Quốc gia"},
+        title=title,
+    )
+
+    fig_top.update_traces(
+        texttemplate="%{text:,.2f}" if "rate" in metric_col.lower() else "%{text:,}",
+        textposition="outside",
+    )
+
+    fig_top.update_layout(
+        xaxis_title=None,
+        yaxis_title=None,
+        coloraxis_showscale=False,
+        height=500,
+        paper_bgcolor="#0E1117",
+        plot_bgcolor="#0E1117",
+        font=dict(color="white", size=14),
+        title=dict(x=0.5, font=dict(size=18)),
+        margin=dict(l=50, r=20, t=80, b=20)
+    )
+
+    st.plotly_chart(fig_top, use_container_width=True)
+
 
 # ===============================
 # 6️⃣ Footer
