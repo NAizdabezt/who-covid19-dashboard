@@ -157,12 +157,11 @@ col4.metric("🌎 Quốc gia bị ảnh hưởng", f"{affected_countries}")
 # ===============================
 # 5️⃣ Tabs cho phần nội dung chính
 # ===============================
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📈 Xu hướng ca nhiễm",
     "🗺️ Bản đồ thế giới",
     "🏆 Top quốc gia",
     "📋 Dữ liệu chi tiết",
-    "🏆 Top quốc gia"
 ])
 
 # --- TAB 1: Xu hướng theo thời gian ---
@@ -267,102 +266,6 @@ with tab2:
 
 # --- TAB 3: Tổng quan ---
 with tab3:
-    st.subheader("📊 Thống kê tổng quan")
-    # Đảm bảo dữ liệu đã sắp xếp theo tổng ca
-    top_cases = latest_filtered.nlargest(10, "Cumulative_cases")
-    top_deaths = latest_filtered.nlargest(10, "Cumulative_deaths")
-    latest_filtered["Death_rate"] = (latest_filtered["Cumulative_deaths"] / latest_filtered["Cumulative_cases"]) * 100
-    top_death_rate = latest_filtered.nlargest(10, "Death_rate")
-    top_cases_per_mil = latest_filtered.nlargest(10, "Cases_per_million")
-
-    # Top 10 quốc gia có số ca cao nhất
-    top_countries = latest.sort_values(by="Cumulative_cases", ascending=False).head(10)
-
-    st.markdown("### 🌍 Top 10 quốc gia có tổng ca nhiễm cao nhất")
-
-    fig_top = px.bar(
-        top_countries.sort_values("Cumulative_cases", ascending=True),
-        x="Cumulative_cases",
-        y="Country",
-        orientation="h",  # 👉 biểu đồ ngang
-        text="Cumulative_cases",
-        color="Cumulative_cases",
-        color_continuous_scale="Reds",
-        labels={"Cumulative_cases": "Tổng ca nhiễm", "Country": "Quốc gia"},
-        title="Top 10 quốc gia có tổng ca nhiễm COVID-19 cao nhất",
-    )
-
-    fig_top.update_traces(
-        texttemplate="%{text:,}",  # Hiển thị số có dấu phẩy
-        textposition="outside",
-    )
-
-    fig_top.update_layout(
-        xaxis_title=None,
-        yaxis_title=None,
-        coloraxis_showscale=False,
-        height=500,
-        paper_bgcolor="#0E1117",
-        plot_bgcolor="#0E1117",
-        font=dict(color="white", size=14),
-        title=dict(x=0.5, font=dict(size=18)),
-        margin=dict(l=50, r=50, t=80, b=20)
-    )
-
-    st.plotly_chart(fig_top, use_container_width=True)
-
-# --- Top 10 tổng ca tử vong ---
-    st.markdown("#### ⚰️ Top 10 quốc gia có **tổng ca tử vong cao nhất**")
-    fig_deaths = px.bar(
-        top_deaths.sort_values("Cumulative_deaths"),
-        x="Cumulative_deaths",
-        y="Country",
-        orientation="h",
-        color="Cumulative_deaths",
-        color_continuous_scale="OrRd",
-        title="Top 10 quốc gia có tổng ca tử vong cao nhất",
-    )
-    fig_deaths.update_layout(showlegend=False, title_x=0.5, height=500)
-    st.plotly_chart(fig_deaths, use_container_width=True)
-
-    # --- Top 10 tỷ lệ tử vong cao nhất ---
-    st.markdown("#### 💀 Top 10 quốc gia có **tỷ lệ tử vong cao nhất (%)**")
-    fig_rate = px.bar(
-        top_death_rate.sort_values("Death_rate"),
-        x="Death_rate",
-        y="Country",
-        orientation="h",
-        color="Death_rate",
-        color_continuous_scale="Peach",
-        title="Top 10 quốc gia có tỷ lệ tử vong cao nhất (%)",
-    )
-    fig_rate.update_layout(showlegend=False, title_x=0.5, height=500)
-    st.plotly_chart(fig_rate, use_container_width=True)
-
-    # --- Top 10 ca nhiễm trên 1 triệu dân ---
-    st.markdown("#### 🌍 Top 10 quốc gia có **ca nhiễm trên 1 triệu dân cao nhất**")
-    fig_mil = px.bar(
-        top_cases_per_mil.sort_values("Cases_per_million"),
-        x="Cases_per_million",
-        y="Country",
-        orientation="h",
-        color="Cases_per_million",
-        color_continuous_scale="Reds",
-        title="Top 10 quốc gia có tỷ lệ ca/1 triệu dân cao nhất",
-    )
-    fig_mil.update_layout(showlegend=False, title_x=0.5, height=500)
-    st.plotly_chart(fig_mil, use_container_width=True)
-
-
-# --- TAB 4: Dữ liệu chi tiết ---
-with tab4:
-    st.subheader("📋 Dữ liệu chi tiết theo quốc gia (theo thời gian lọc)")
-    st.dataframe(
-        latest_filtered[["Country", "Cumulative_cases", "Cumulative_deaths", "Fatality_rate"]]
-        .sort_values(by="Cumulative_cases", ascending=False)
-        .reset_index(drop=True)
-    )
-with tab5:
     st.subheader("📊 Phân tích Top quốc gia COVID-19")
 
     # Thêm cột tỷ lệ tử vong (%)
@@ -439,6 +342,14 @@ with tab5:
 
     st.plotly_chart(fig_top, use_container_width=True)
 
+# --- TAB 4: Dữ liệu chi tiết ---
+with tab4:
+    st.subheader("📋 Dữ liệu chi tiết theo quốc gia (theo thời gian lọc)")
+    st.dataframe(
+        latest_filtered[["Country", "Cumulative_cases", "Cumulative_deaths", "Fatality_rate"]]
+        .sort_values(by="Cumulative_cases", ascending=False)
+        .reset_index(drop=True)
+    )   
 
 # ===============================
 # 6️⃣ Footer
