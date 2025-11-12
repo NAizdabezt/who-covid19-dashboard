@@ -55,40 +55,45 @@ max_date = max_ts.date()
 st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_date}** đến **{max_date}**.")
 
 # ===============================
-# 🗓️ Bộ lọc theo thời gian (giữ nguyên Month/Year picker)
+# 🗓️ Bộ lọc theo thời gian (phiên bản an toàn tuyệt đối)
 # ===============================
-
-st.sidebar.subheader("📅 Khoảng thời gian")
 
 # Đảm bảo cột ngày là datetime
 df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
 
-# Lấy mốc thời gian nhỏ nhất/lớn nhất
+# Lấy mốc min/max
 min_ts = df["Date_reported"].min()
 max_ts = df["Date_reported"].max()
 
-# Chọn khoảng ngày (có hiển thị Month/Year picker)
-date_range = st.sidebar.date_input(
+
+st.sidebar.subheader("📅 Khoảng thời gian")
+
+# Người dùng chọn khoảng ngày
+date_input = st.sidebar.date_input(
     "Chọn khoảng thời gian",
-    value=(min_ts, max_ts),
-    min_value=min_ts,
-    max_value=max_ts,
-    format="YYYY-MM-DD"  # Giúp định dạng rõ ràng
+    value=(min_ts.date(), max_ts.date())
 )
 
-# Xử lý kết quả trả về
-if isinstance(date_range, tuple) and len(date_range) == 2:
-    start_ts, end_ts = map(pd.to_datetime, date_range)
+# ✅ Kiểm tra trường hợp click 1 ngày
+if isinstance(date_input, (list, tuple)) and len(date_input) == 2:
+    start_ts = pd.to_datetime(date_input[0])
+    end_ts = pd.to_datetime(date_input[1])
+elif isinstance(date_input, (list, tuple)) and len(date_input) == 1:
+    # chỉ click 1 lần → bỏ qua, dùng full range
+    start_ts, end_ts = min_ts, max_ts
 else:
+    # nếu streamlit trả về 1 giá trị scalar (click 1 ngày)
     start_ts, end_ts = min_ts, max_ts
 
-# Đảm bảo trong phạm vi hợp lệ
-start_ts = max(start_ts, min_ts)
-end_ts = min(end_ts, max_ts)
+# ✅ Đảm bảo hợp lệ trong range
+if start_ts < min_ts:
+    start_ts = min_ts
+if end_ts > max_ts:
+    end_ts = max_ts
 if start_ts > end_ts:
     start_ts, end_ts = end_ts, start_ts
 
-# Lọc dữ liệu theo khoảng thời gian
+# ✅ Lọc dữ liệu
 df_filtered = df[(df["Date_reported"] >= start_ts) & (df["Date_reported"] <= end_ts)]
 
 st.caption(f"📆 Dữ liệu hiển thị: từ **{start_ts.date()}** đến **{end_ts.date()}**")
