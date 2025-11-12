@@ -55,10 +55,8 @@ max_date = max_ts.date()
 st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_date}** đến **{max_date}**.")
 
 # ===============================
-# 🗓️ Bộ lọc theo thời gian (phiên bản tiếng Việt + có nút reset)
+# 🗓️ Bộ lọc theo thời gian (phiên bản an toàn tuyệt đối)
 # ===============================
-
-import datetime
 
 # Đảm bảo cột ngày là datetime
 df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
@@ -67,34 +65,31 @@ df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
 min_ts = df["Date_reported"].min()
 max_ts = df["Date_reported"].max()
 
+
 st.sidebar.subheader("📅 Khoảng thời gian")
 
-# --- Bộ lọc ngày và nút reset ---
-col1, col2 = st.sidebar.columns([3, 1])
-with col1:
-    date_input = st.date_input(
-        "Chọn khoảng thời gian",
-        value=(min_ts.date(), max_ts.date()),
-        format="YYYY/MM/DD"
-    )
-with col2:
-    reset = st.button("🔄 Đặt lại")
+# Người dùng chọn khoảng ngày
+date_input = st.sidebar.date_input(
+    "Chọn khoảng thời gian",
+    value=(min_ts.date(), max_ts.date())
+)
 
-# --- Nếu bấm reset thì khôi phục full range ---
-if reset:
-    date_input = (min_ts.date(), max_ts.date())
-    st.experimental_rerun()
-
-# ✅ Kiểm tra hợp lệ và xử lý các trường hợp chọn ngày
+# ✅ Kiểm tra trường hợp click 1 ngày
 if isinstance(date_input, (list, tuple)) and len(date_input) == 2:
     start_ts = pd.to_datetime(date_input[0])
     end_ts = pd.to_datetime(date_input[1])
+elif isinstance(date_input, (list, tuple)) and len(date_input) == 1:
+    # chỉ click 1 lần → bỏ qua, dùng full range
+    start_ts, end_ts = min_ts, max_ts
 else:
+    # nếu streamlit trả về 1 giá trị scalar (click 1 ngày)
     start_ts, end_ts = min_ts, max_ts
 
-# ✅ Giới hạn trong phạm vi hợp lệ
-start_ts = max(start_ts, min_ts)
-end_ts = min(end_ts, max_ts)
+# ✅ Đảm bảo hợp lệ trong range
+if start_ts < min_ts:
+    start_ts = min_ts
+if end_ts > max_ts:
+    end_ts = max_ts
 if start_ts > end_ts:
     start_ts, end_ts = end_ts, start_ts
 
@@ -105,8 +100,6 @@ st.caption(f"📆 Dữ liệu hiển thị: từ **{start_ts.date()}** đến **
 
 # Gán lại cho df chính
 df = df_filtered.copy()
-
-
 
 # # Checkbox hiển thị bản đồ
 # show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
