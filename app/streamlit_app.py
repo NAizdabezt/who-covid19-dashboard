@@ -9,7 +9,6 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 import xgboost as xgb
 import plotly.graph_objects as go
 import plotly.express as px
-from math import sqrt
 
 # ===============================
 # 1️⃣ Cấu hình trang
@@ -360,243 +359,223 @@ with tab4:
     )   
 
 # ---------------------------
-# TAB: 🔮 Dự báo & Backtesting
+# TAB: 🔮 Dự báo & Backtesting (Machine Learning)
 # ---------------------------
 
-# ==== HỖ TRỢ: tạo feature lag + rolling ====
-def make_features(df_country, target_col="New_cases", max_lag=14):
-    """
-    Input: df_country có Date_reported (datetime) và target_col (New_cases)
-    Output: DataFrame sorted, có lag1/7/14, ma7, ma14, weekday
-    """
-    dfc = df_country.sort_values("Date_reported").copy()
-    dfc = dfc.reset_index(drop=True)
-    # ensure index is continuous days? we will not reindex by date to avoid holes; assume daily reporting mostly present
-    for lag in [1,7,14]:
-        dfc[f"lag_{lag}"] = dfc[target_col].shift(lag)
-    dfc["ma7"] = dfc[target_col].rolling(7, min_periods=1).mean().shift(1)
-    dfc["ma14"] = dfc[target_col].rolling(14, min_periods=1).mean().shift(1)
-    dfc["weekday"] = dfc["Date_reported"].dt.weekday
-    dfc = dfc.dropna(subset=[f"lag_{l}" for l in [1,7,14]])  # remove top rows without lags
-    return dfc
-
-# ==== Huấn luyện model đơn giản (fit trên X,y) ====
-def fit_model(name, X_train, y_train, random_state=42):
-    if name == "LinearRegression":
-        model = LinearRegression()
-        model.fit(X_train, y_train)
-        return model
-    elif name == "RandomForest":
-        model = RandomForestRegressor(n_estimators=200, random_state=random_state)
-        model.fit(X_train, y_train)
-        return model
-    elif name == "XGBoost":
-        model = xgb.XGBRegressor(n_estimators=200, random_state=random_state, verbosity=0)
-        model.fit(X_train, y_train)
-        return model
-    else:
-        raise ValueError("Unknown model name")
-
-# ==== Dự báo tương lai bằng cách lặp autoregressive với features lag/ma ====
-def iterative_forecast(model, df_feat, horizon=14, features=None, target_col="New_cases"):
-    """
-    df_feat: dữ liệu đã có feature, sorted, dùng để khởi tạo last lags
-    Trả về array dự báo length=horizon
-    Strategy: lấy last row, dùng lag features để predict next, append, update lags/mas iteratively.
-    """
-    last = df_feat.iloc[-1].copy()
-    preds = []
-    # copy arrays of last values to update
-    lag1 = last["lag_1"]
-    lag7 = last["lag_7"]
-    lag14 = last["lag_14"]
-    # to compute moving averages we need queue of recent values
-    recent = list(df_feat[target_col].iloc[-14:].values)  # at most last14
-    for h in range(horizon):
-        row = {}
-        row["lag_1"] = lag1
-        row["lag_7"] = lag7
-        row["lag_14"] = lag14
-        row["ma7"] = np.mean(recent[-7:]) if len(recent) >= 1 else np.mean(recent)
-        row["ma14"] = np.mean(recent[-14:]) if len(recent) >= 1 else np.mean(recent)
-        # weekday we approximate by incrementing day
-        weekday = (int(last["Date_reported"].weekday()) + h + 1) % 7
-        row["weekday"] = weekday
-        X_row = np.array([row[f] for f in features]).reshape(1,-1)
-        pred = model.predict(X_row)[0]
-        if np.isnan(pred) or pred < 0:
-            pred = max(0.0, 0.0)  # clamp to zero
-        preds.append(pred)
-        # update lags and recent
-        recent.append(pred)
-        lag14 = lag7 if isinstance(lag7, (int,float,np.number)) else lag7
-        lag7 = lag1 if isinstance(lag1, (int,float,np.number)) else lag1
-        lag1 = pred
-    return np.array(preds)
-
-# ==== Backtesting rolling-window ====
-def backtest_models(df_country, model_names, window_size_days=180, horizon=14, max_folds=8, features=None, target_col="New_cases"):
-    """
-    df_country: per-country timeline with Date_reported and New_cases
-    window_size_days: số ngày dùng để train mỗi fold
-    horizon: forecast horizon per fold (7,14,30)
-    max_folds: giới hạn fold để tránh quá nặng
-    returns: result dict per model: metrics list and average
-    """
-    dfc = make_features(df_country, target_col=target_col)
-    results = {m: [] for m in model_names}
-    n = len(dfc)
-    # compute fold starts: use last portion of df so test windows are near end
-    # we will create folds end positions such that test_end <= last_index
-    # start indices (train_end) will be evenly spaced
-    if n < window_size_days + horizon:
-        return {m: {"error": f"Không đủ dữ liệu cho window={window_size_days} và horizon={horizon} (n={n})"} for m in model_names}
-    # possible train_end indices: from window_size_days to n - horizon
-    possible_ends = list(range(window_size_days, n - horizon + 1))
-    # choose up to max_folds evenly spaced
-    if len(possible_ends) > max_folds:
-        idxs = np.linspace(possible_ends[0], possible_ends[-1], max_folds, dtype=int)
-    else:
-        idxs = possible_ends
-    for train_end in idxs:
-        train_df = dfc.iloc[train_end - window_size_days: train_end]
-        test_df = dfc.iloc[train_end: train_end + horizon]
-        X_train = train_df[features].values
-        y_train = train_df[target_col].values
-        X_test = test_df[features].values
-        y_test = test_df[target_col].values
-        for m in model_names:
-            model = fit_model(m, X_train, y_train)
-            preds = model.predict(X_test)
-            # clamp negatives
-            preds = np.where(np.isnan(preds), 0.0, preds)
-            preds = np.clip(preds, 0, None)
-            rmse = sqrt(mean_squared_error(y_test, preds))
-            mae = mean_absolute_error(y_test, preds)
-            # MAPE safe
-            with np.errstate(divide='ignore', invalid='ignore'):
-                mape = np.mean(np.abs((y_test - preds) / np.where(y_test==0, np.nan, y_test))) * 100
-                if np.isnan(mape):
-                    mape = np.nan
-            results[m].append({"rmse": rmse, "mae": mae, "mape": mape})
-    # aggregate
-    summary = {}
-    for m in model_names:
-        if isinstance(results[m], dict) and "error" in results[m]:
-            summary[m] = results[m]
-            continue
-        rmses = [r["rmse"] for r in results[m]]
-        maes = [r["mae"] for r in results[m]]
-        mapes = [r["mape"] for r in results[m] if not np.isnan(r["mape"])]
-        summary[m] = {
-            "folds": len(results[m]),
-            "rmse_mean": float(np.mean(rmses)) if len(rmses)>0 else None,
-            "mae_mean": float(np.mean(maes)) if len(maes)>0 else None,
-            "mape_mean": float(np.mean(mapes)) if len(mapes)>0 else None,
-            "per_fold": results[m]
-        }
-    return summary
-
-# ====== Streamlit UI for ML tab ======
-tab_ml = st.tab if False else None  # placeholder if you want to insert differently
-
-# Create actual tab inside app tabs list
-# If you already have `tab1, tab2, ... = st.tabs([...])`, append this tab accordingly.
-# Below we create a standalone tab using st.expander if tabs structure differs.
 with st.expander("🔮 Dự báo & Backtesting (Machine Learning) — Mở/Đóng"):
-    st.markdown("### Cấu hình model & backtest")
-    countries_all = sorted(df["Country"].unique())
-    country_sel = st.selectbox("Chọn quốc gia để dự báo", countries_all, index=countries_all.index("Viet Nam") if "Viet Nam" in countries_all else 0)
-    model_choice = st.multiselect("Chọn mô hình (có thể chọn nhiều)", ["LinearRegression","RandomForest","XGBoost"], default=["LinearRegression","RandomForest","XGBoost"])
-    horizon = st.selectbox("Horizon (số ngày dự báo)", [7,14,30], index=1)
-    window_size = st.slider("Window train cho mỗi fold (ngày)", min_value=60, max_value=365, value=180, step=30)
-    max_folds = st.slider("Số fold tối đa cho backtesting (giảm để nhanh hơn)", min_value=1, max_value=12, value=6)
-    run_backtest = st.button("🔁 Chạy Backtesting (rolling-window)")
+    st.markdown("### ⚙ Cấu hình mô hình & Backtesting")
 
-    # chọn kiểu dự báo cuối cùng (train on full history)
-    run_forecast = st.button("📈 Huấn luyện toàn bộ & Dự báo tương lai (train full)")
+    # ==== CHỌN QUỐC GIA ====
+    countries_all = sorted(df["Country"].unique())
+    country_sel = st.selectbox(
+        "Chọn quốc gia để dự báo:",
+        countries_all,
+        index=countries_all.index("Viet Nam") if "Viet Nam" in countries_all else 0
+    )
+
+    # ==== CHỌN MÔ HÌNH ====
+    model_choice = st.multiselect(
+        "Chọn mô hình (có thể chọn nhiều):",
+        ["LinearRegression", "RandomForest", "XGBoost"],
+        default=["LinearRegression", "RandomForest"]
+    )
+
+    # ==== HYPERPARAMS ====
+    horizon = st.selectbox("Horizon dự báo (ngày):", [7, 14, 30], index=1)
+    window_size = st.slider("Kích thước Window train mỗi fold (ngày):", 60, 365, 180, 30)
+    max_folds = st.slider("Số fold tối đa cho backtesting:", 1, 12, 6)
+
+    run_backtest = st.button("🔁 Chạy Backtesting (rolling-window)")
+    run_forecast = st.button("📈 Huấn luyện & Dự báo tương lai")
 
     st.write("---")
-    # prepare data of selected country
+
+    # Lấy dữ liệu theo quốc gia
     df_country = df[df["Country"] == country_sel].sort_values("Date_reported").reset_index(drop=True)
-    st.markdown(f"**Dữ liệu chọn:** {country_sel} — {len(df_country)} dòng ({df_country['Date_reported'].min().date()} → {df_country['Date_reported'].max().date()})")
+    st.markdown(
+        f"**Dữ liệu sử dụng:** {country_sel} — {len(df_country)} dòng "
+        f"(_{df_country['Date_reported'].min().date()} → {df_country['Date_reported'].max().date()}_)."
+    )
+
+    # Nếu dữ liệu quá ít
     if len(df_country) < 30:
-        st.warning("Dữ liệu quá ít để huấn luyện/kiểm định: cần >= 30 dòng.")
+        st.warning("Dữ liệu quá ít để huấn luyện — cần >= 30 dòng.")
+        st.stop()
 
-    features = ["lag_1","lag_7","lag_14","ma7","ma14","weekday"]
+    # ---------------------------
+    # 🎯 FEATURE ENGINEERING
+    # ---------------------------
+    def make_features(df_country, target_col="New_cases"):
+        dfc = df_country.sort_values("Date_reported").copy()
+        dfc.reset_index(drop=True, inplace=True)
+
+        for lag in [1,7,14]:
+            dfc[f"lag_{lag}"] = dfc[target_col].shift(lag)
+
+        dfc["ma7"] = dfc[target_col].rolling(7).mean().shift(1)
+        dfc["ma14"] = dfc[target_col].rolling(14).mean().shift(1)
+        dfc["weekday"] = dfc["Date_reported"].dt.weekday
+
+        return dfc.dropna()
+
+    features = ["lag_1", "lag_7", "lag_14", "ma7", "ma14", "weekday"]
     df_feat = make_features(df_country)
-    # show last few rows of features
-    if st.checkbox("Hiện preview features (last 5 dòng)"):
-        st.dataframe(df_feat[["Date_reported","New_cases"] + features].tail(10))
 
-    # ---- Backtesting ----
+    if st.checkbox("📌 Xem trước dữ liệu feature (10 dòng cuối):"):
+        st.dataframe(df_feat[["Date_reported", "New_cases"] + features].tail(10), height=260)
+
+    # ---------------------------
+    # 🎯 MÔ HÌNH: Train
+    # ---------------------------
+    def fit_model(name, X_train, y_train):
+        if name == "LinearRegression":
+            return LinearRegression().fit(X_train, y_train)
+        elif name == "RandomForest":
+            return RandomForestRegressor(n_estimators=200, random_state=42).fit(X_train, y_train)
+        elif name == "XGBoost":
+            return xgb.XGBRegressor(n_estimators=200, random_state=42, verbosity=0).fit(X_train, y_train)
+        else:
+            raise ValueError("Unknown model")
+
+    # ---------------------------
+    # 🎯 BACKTESTING
+    # ---------------------------
+    def backtest(df_country, models, window_days, horizon, max_folds):
+        dfc = make_features(df_country)
+        results = {m: [] for m in models}
+
+        n = len(dfc)
+        if n < window_days + horizon:
+            return {"error": f"Dữ liệu không đủ cho window={window_days} & horizon={horizon}"}
+
+        possible_ends = list(range(window_days, n - horizon))
+        if len(possible_ends) > max_folds:
+            train_points = np.linspace(possible_ends[0], possible_ends[-1], max_folds, dtype=int)
+        else:
+            train_points = possible_ends
+
+        for train_end in train_points:
+            train = dfc.iloc[train_end - window_days : train_end]
+            test = dfc.iloc[train_end : train_end + horizon]
+
+            X_train, y_train = train[features].values, train["New_cases"].values
+            X_test, y_test   = test[features].values,  test["New_cases"].values
+
+            for m in models:
+                model = fit_model(m, X_train, y_train)
+                preds = np.clip(model.predict(X_test), 0, None)
+
+                rmse = np.sqrt(mean_squared_error(y_test, preds))
+                mae = mean_absolute_error(y_test, preds)
+
+                results[m].append({"rmse": rmse, "mae": mae})
+
+        return results
+
+    # ---------------------------
+    # RUN BACKTESTING
+    # ---------------------------
     if run_backtest:
-        with st.spinner("Đang chạy backtesting... (có thể mất vài chục giây tuỳ cấu hình)"):
-            summary = backtest_models(df_country, model_choice, window_size_days=window_size, horizon=horizon, max_folds=max_folds, features=features)
-        st.success("Hoàn tất backtesting")
-        # hiển thị bảng tóm tắt
-        rows = []
-        for m in model_choice:
-            val = summary.get(m)
-            if val is None:
-                continue
-            if "error" in val:
-                st.error(f"{m}: {val['error']}")
-                continue
-            rows.append({
-                "model": m,
-                "folds": val["folds"],
-                "rmse_mean": round(val["rmse_mean"],2) if val["rmse_mean"] is not None else None,
-                "mae_mean": round(val["mae_mean"],2) if val["mae_mean"] is not None else None,
-                "mape_mean": round(val["mape_mean"],2) if val["mape_mean"] is not None else None
-            })
-        if len(rows) > 0:
-            st.table(pd.DataFrame(rows).sort_values("rmse_mean"))
-            # bar chart rmse compare
-            df_comp = pd.DataFrame(rows)
-            fig_err = px.bar(df_comp, x="model", y="rmse_mean", title=f"RMSE trung bình (horizon={horizon}d)", text="rmse_mean")
+        with st.spinner("⏳ Đang chạy Backtesting..."):
+            res = backtest(df_country, model_choice, window_size, horizon, max_folds)
+
+        st.success("✔ Backtesting hoàn tất!")
+
+        for m in res:
+            scores = res[m]
+            st.write(f"### 📌 {m} — Trung bình {len(scores)} folds")
+            rmse_avg = np.mean([s["rmse"] for s in scores])
+            mae_avg = np.mean([s["mae"] for s in scores])
+
+            st.write(f"- RMSE trung bình: **{rmse_avg:.2f}**")
+            st.write(f"- MAE trung bình: **{mae_avg:.2f}**")
+
+            fig_err = px.bar(
+                pd.DataFrame(scores),
+                y="rmse", title=f"RMSE các fold — {m}", color="rmse"
+            )
             st.plotly_chart(fig_err, use_container_width=True)
 
-    # ---- Train full + forecast ----
+    # ---------------------------
+    # 🎯 DỰ BÁO TƯƠNG LAI (train full)
+    # ---------------------------
     if run_forecast:
-        if len(df_feat) < 10:
-            st.error("Không đủ dữ liệu để train full model.")
-        else:
-            st.info("Huấn luyện trên toàn bộ lịch sử (đã tạo feature) và dự báo tương lai.")
-            X_full = df_feat[features].values
-            y_full = df_feat["New_cases"].values
-            forecasts = {}
+        X_full = df_feat[features].values
+        y_full = df_feat["New_cases"].values
+
+        future_predictions = {}
+        last_row = df_feat.iloc[-1]
+
+        with st.spinner("⏳ Đang huấn luyện và dự báo..."):
+
             for m in model_choice:
                 model = fit_model(m, X_full, y_full)
-                preds = iterative_forecast(model, df_feat, horizon=horizon, features=features)
-                forecasts[m] = preds
-            # build plot: show history last 120 days + forecasts
-            lookback = 120
-            hist = df_country.tail(lookback).copy()
-            hist_idx = hist["Date_reported"].tolist()
-            last_date = df_country["Date_reported"].max()
-            future_dates = [last_date + pd.Timedelta(days=i+1) for i in range(horizon)]
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=hist["Date_reported"], y=hist["New_cases"], mode="lines+markers", name="Actual (last 120d)"))
-            colors = {"LinearRegression":"#1f77b4","RandomForest":"#ff7f0e","XGBoost":"#2ca02c"}
-            for m, preds in forecasts.items():
-                fig.add_trace(go.Scatter(x=future_dates, y=preds, mode="lines+markers", name=f"Forecast: {m}", line=dict(color=colors.get(m,None))))
-            fig.update_layout(title=f"Actual vs Forecast ({country_sel}) — horizon={horizon} days", xaxis_title="Date", yaxis_title="New cases")
-            st.plotly_chart(fig, use_container_width=True)
-            # show numeric table of forecasts
-            df_f = pd.DataFrame({"Date": future_dates})
-            for m, preds in forecasts.items():
-                df_f[m] = preds.astype(int)
-            st.dataframe(df_f)
+                preds = []
 
-    st.markdown("### Ghi chú")
-    st.markdown("""
-    - Backtesting dùng `rolling window` giống mô tả trong báo cáo (chạy nhiều fold, báo RMSE/MAE/ MAPE trung bình).  
-    - Forecast (train full) huấn luyện trên toàn bộ dữ liệu hiện có (sau feature) rồi **dự báo autoregressive** (dùng lag/ma).  
-    - Để nhanh, giảm `max_folds` hoặc `window_size` khi chạy trên Streamlit Cloud.  
-    - Nếu muốn mình mở rộng: thêm CI (confidence interval) cho XGBoost bằng bootstrap, thêm gridsearch cho hyperparams, hoặc lưu model đã train vào cache để forecast nhanh.
-    """)
+                lag1 = last_row["lag_1"]
+                lag7 = last_row["lag_7"]
+                lag14 = last_row["lag_14"]
+                recent = list(df_feat["New_cases"].iloc[-14:].values)
 
+                for i in range(horizon):
+                    weekday = (int(last_row["Date_reported"].weekday()) + i + 1) % 7
+
+                    row = {
+                        "lag_1": lag1,
+                        "lag_7": lag7,
+                        "lag_14": lag14,
+                        "ma7": np.mean(recent[-7:]),
+                        "ma14": np.mean(recent[-14:]),
+                        "weekday": weekday,
+                    }
+
+                    X_new = np.array([row[f] for f in features]).reshape(1, -1)
+                    pred = max(0, model.predict(X_new)[0])
+                    preds.append(pred)
+
+                    # cập nhật lags
+                    recent.append(pred)
+                    lag14, lag7, lag1 = lag7, lag1, pred
+
+                future_predictions[m] = preds
+
+        # Vẽ biểu đồ forecast
+        last_date = df_country["Date_reported"].max()
+        future_dates = [last_date + pd.Timedelta(days=i+1) for i in range(horizon)]
+
+        fig_fc = go.Figure()
+        fig_fc.add_trace(go.Scatter(
+            x=df_country["Date_reported"].tail(100),
+            y=df_country["New_cases"].tail(100),
+            mode="lines+markers",
+            name="Actual (last 100 days)"
+        ))
+
+        colors = {"LinearRegression": "#1f77b4", "RandomForest": "#ff7f0e", "XGBoost": "#2ca02c"}
+
+        for m in future_predictions:
+            fig_fc.add_trace(go.Scatter(
+                x=future_dates,
+                y=future_predictions[m],
+                mode="lines+markers",
+                name=f"Forecast — {m}",
+                line=dict(color=colors.get(m, None))
+            ))
+
+        fig_fc.update_layout(
+            title=f"📈 Dự báo số ca nhiễm — {country_sel}",
+            xaxis_title="Ngày",
+            yaxis_title="Ca nhiễm mới"
+        )
+
+        st.plotly_chart(fig_fc, use_container_width=True)
+
+        # bảng forecast
+        df_out = pd.DataFrame({"Date": future_dates})
+        for m in future_predictions:
+            df_out[m] = np.array(future_predictions[m]).astype(int)
+
+        st.dataframe(df_out)
 
 # ===============================
 # 6️⃣ Footer
