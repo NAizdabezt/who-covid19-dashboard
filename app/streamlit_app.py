@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -5,506 +6,372 @@ import plotly.express as px
 import plotly.graph_objects as go
 import joblib
 import xgboost as xgb
-# ===============================
-# 1️⃣ Cấu hình trang
-# ===============================
-st.set_page_config(
-    page_title="WHO COVID-19 Global Dashboard",
-    page_icon="🌍",
-    layout="wide"
-)
-
-st.title("🌍 WHO COVID-19 Global COVID-19 Dashboard")
-st.markdown("""
-### Tổng quan tình hình COVID-19 toàn cầu  
-Dữ liệu cập nhật và trực quan hóa theo quốc gia từ **World Health Organization (WHO)**.  
-""")
+from typing import Tuple
 
 # ===============================
-# 2️⃣ Đọc dữ liệu
+# CONFIG
 # ===============================
-@st.cache_data
-def load_data():
-    try:
-        df = pd.read_csv("data/df_clean.csv.gz")
-        latest = pd.read_csv("data/latest.csv.gz")
-        df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
-        return df, latest
-    except Exception as e:
-        st.error(f"Lỗi khi tải dữ liệu: {e}")
-        return None, None
+st.set_page_config(page_title="WHO COVID-19 Dashboard (Optimized)", page_icon="🌍", layout="wide")
+st.title("🌍 WHO COVID-19 Global COVID-19 Dashboard (Optimized)")
+st.markdown("Dữ liệu và dashboard tối ưu: cache xử lý, load model sẵn, tắt render nặng khi không cần.")
 
-df, latest = load_data()
-
-if df is None or latest is None:
-    st.stop()  # Dừng app nếu chưa có dữ liệu
-    
 # ===============================
-# 🔥 Load các model đã train sẵn
+# HELPERS: path resolution
 # ===============================
+# Common possible paths (colab, local repo, uploaded)
+POSSIBLE_DF_PATHS = [
+    "data/df_clean.csv.gz",
+    "data/df_clean.csv",
+    "/mnt/data/df_clean.csv.gz",
+    "/mnt/data/df_clean.csv",
+    "/content/drive/MyDrive/dataWHO/df_clean.csv",
+    "/content/drive/MyDrive/dataWHO/df_clean.csv.gz"
+]
+POSSIBLE_LATEST_PATHS = [
+    "data/latest.csv.gz",
+    "data/latest.csv",
+    "/mnt/data/latest (1).csv.gz",      # uploaded file path from this session
+    "/mnt/data/latest.csv.gz",
+    "/mnt/data/latest.csv",
+    "/content/drive/MyDrive/dataWHO/latest.csv",
+    "/content/drive/MyDrive/dataWHO/latest.csv.gz"
+]
 
-# Linear Regression
-model_lr = joblib.load("app/models/model_lr.pkl")
-
-# Random Forest
-model_rf = joblib.load("app/models/model_rf.pkl")
-
-# XGBoost (JSON)
-model_xgb = xgb.XGBRegressor()
-model_xgb.load_model("app/models/model_xgb.json")
-
-MODELS = {
-    "Linear Regression": model_lr,
-    "Random Forest": model_rf,
-    "XGBoost": model_xgb
+POSSIBLE_MODEL_PATHS = {
+    "lr": "app/models/model_lr.pkl",
+    "rf": "app/models/model_rf.pkl",
+    "xgb_json": "app/models/model_xgb.json"
 }
 
-# ===============================
-# 3️⃣ Sidebar – bộ lọc
-# ===============================
-st.sidebar.header("🎚️ Bộ lọc dữ liệu")
+def find_first_existing(paths):
+    for p in paths:
+        if os.path.exists(p):
+            return p
+    return None
 
-countries = sorted(df["Country"].unique())
+# ===============================
+# 1) Load data (cached)
+# ===============================
+@st.cache_data(show_spinner=False)
+def load_data_cached() -> Tuple[pd.DataFrame, pd.DataFrame]:
+    # Try df_clean
+    df_path = find_first_existing(POSSIBLE_DF_PATHS)
+    latest_path = find_first_existing(POSSIBLE_LATEST_PATHS)
+
+    # Fallback: try to read from repo paths (if not present, raise clear error)
+    if df_path is None and latest_path is None:
+        raise FileNotFoundError(
+            "Không tìm thấy file df_clean/latest. Thử upload vào /mnt/data hoặc đặt vào thư mục data/ trong repo."
+        )
+
+    # load df (full timeseries)
+    if df_path:
+        df = pd.read_csv(df_path, parse_dates=["Date_reported"], low_memory=False)
+    else:
+        # try to construct df from latest? safer to error
+        df = pd.DataFrame()
+    # load latest (per-country snapshot)
+    if latest_path:
+        latest = pd.read_csv(latest_path, low_memory=False)
+    else:
+        latest = pd.DataFrame()
+
+    # Ensure types and column names standardized
+    if "Date_reported" in df.columns:
+        df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
+    # normalize column names (strip)
+    df.columns = df.columns.str.strip()
+    latest.columns = latest.columns.str.strip()
+
+    return df, latest
+
+# Load data and handle errors
+try:
+    df, latest = load_data_cached()
+except Exception as e:
+    st.error(f"Lỗi khi load dữ liệu: {e}")
+    st.stop()
+
+# ===============================
+# 2) Load models (cached resource)
+# ===============================
+@st.cache_resource
+def load_models():
+    models = {}
+    # Linear Regression
+    p_lr = POSSIBLE_MODEL_PATHS["lr"]
+    if os.path.exists(p_lr):
+        try:
+            models["Linear Regression"] = joblib.load(p_lr)
+        except Exception as e:
+            models["Linear Regression"] = None
+    else:
+        models["Linear Regression"] = None
+    # Random Forest
+    p_rf = POSSIBLE_MODEL_PATHS["rf"]
+    if os.path.exists(p_rf):
+        try:
+            models["Random Forest"] = joblib.load(p_rf)
+        except Exception as e:
+            models["Random Forest"] = None
+    else:
+        models["Random Forest"] = None
+    # XGBoost JSON
+    p_xgb = POSSIBLE_MODEL_PATHS["xgb_json"]
+    if os.path.exists(p_xgb):
+        try:
+            m = xgb.XGBRegressor()
+            m.load_model(p_xgb)
+            models["XGBoost"] = m
+        except Exception as e:
+            models["XGBoost"] = None
+    else:
+        models["XGBoost"] = None
+
+    return models
+
+MODELS = load_models()
+
+# ===============================
+# 3) Sidebar: filters & perf toggles
+# ===============================
+st.sidebar.header("🔎 Bộ lọc & Tùy chọn (Optimized)")
+# country selector
+countries = sorted(df["Country"].dropna().unique()) if "Country" in df.columns else []
 selected_country = st.sidebar.selectbox("Chọn quốc gia", ["Toàn cầu"] + countries)
 
-# Lấy khoảng ngày có trong dữ liệu
-min_ts = pd.to_datetime(df["Date_reported"].min())
-max_ts = pd.to_datetime(df["Date_reported"].max())
-min_date = min_ts.date()
-max_date = max_ts.date()
+# date range selector with safe defaults
+if "Date_reported" in df.columns and not df["Date_reported"].isna().all():
+    min_ts = df["Date_reported"].min()
+    max_ts = df["Date_reported"].max()
+else:
+    min_ts = pd.Timestamp("2020-01-01")
+    max_ts = pd.Timestamp.today()
 
-# Hiển thị chú thích
-st.sidebar.caption(f"📅 Dữ liệu hiện có từ **{min_date}** đến **{max_date}**.")
+st.sidebar.caption(f"Khoảng dữ liệu: {min_ts.date()} → {max_ts.date()}")
 
-# ===============================
-# 🗓️ Bộ lọc theo thời gian (phiên bản an toàn tuyệt đối)
-# ===============================
-
-# Đảm bảo cột ngày là datetime
-df["Date_reported"] = pd.to_datetime(df["Date_reported"], errors="coerce")
-
-# Lấy mốc min/max
-min_ts = df["Date_reported"].min()
-max_ts = df["Date_reported"].max()
-
-
-st.sidebar.subheader("📅 Khoảng thời gian")
-
-# Người dùng chọn khoảng ngày
-date_input = st.sidebar.date_input(
-    "Chọn khoảng thời gian",
-    value=(min_ts.date(), max_ts.date())
-)
-
-# ✅ Kiểm tra trường hợp click 1 ngày
+date_input = st.sidebar.date_input("Chọn khoảng thời gian (nhấn 2 lần để chọn range)", value=(min_ts.date(), max_ts.date()))
+# normalize date_input to start_ts, end_ts
 if isinstance(date_input, (list, tuple)) and len(date_input) == 2:
     start_ts = pd.to_datetime(date_input[0])
     end_ts = pd.to_datetime(date_input[1])
-elif isinstance(date_input, (list, tuple)) and len(date_input) == 1:
-    # chỉ click 1 lần → bỏ qua, dùng full range
-    start_ts, end_ts = min_ts, max_ts
 else:
-    # nếu streamlit trả về 1 giá trị scalar (click 1 ngày)
-    start_ts, end_ts = min_ts, max_ts
-
-# ✅ Đảm bảo hợp lệ trong range
-if start_ts < min_ts:
     start_ts = min_ts
-if end_ts > max_ts:
     end_ts = max_ts
+# clamp
+start_ts = max(start_ts, min_ts)
+end_ts = min(end_ts, max_ts)
 if start_ts > end_ts:
     start_ts, end_ts = end_ts, start_ts
 
-# ✅ Lọc dữ liệu
-df_filtered = df[(df["Date_reported"] >= start_ts) & (df["Date_reported"] <= end_ts)]
-
-st.caption(f"📆 Dữ liệu hiển thị: từ **{start_ts.date()}** đến **{end_ts.date()}**")
-
-# # Cập nhật lại df chính
-# df = df_filtered.copy()
-
-
-# # Checkbox hiển thị bản đồ
-# show_globe2d = st.sidebar.checkbox("🗺️ Hiển thị bản đồ 2D", value=True)
-# show_globe3d = st.sidebar.checkbox("🌐 Hiển thị bản đồ 3D", value=True)
-
-# Lọc dữ liệu chính bằng khoảng ngày mới
-df = df_filtered.copy()
+# Performance toggles
+show_map_2d = st.sidebar.checkbox("Hiển thị bản đồ 2D", value=True)
+show_map_3d = st.sidebar.checkbox("Hiển thị bản đồ 3D (nặng)", value=False)
+show_top_table = st.sidebar.checkbox("Hiển thị Top quốc gia", value=True)
+show_ml = st.sidebar.checkbox("Hiển thị tab ML (load models)", value=False)
 
 # ===============================
-# ✅ Sau khi lọc theo thời gian xong
+# 4) Preprocess & cached aggregations
 # ===============================
-# Tạo bảng latest_filtered: tổng ca và tử vong trong khoảng đã lọc
-latest_filtered = (
-    df_filtered.groupby(["Country", "Country_code"], as_index=False)
-    .agg({
+@st.cache_data
+def filter_df_by_date(df_in: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    if "Date_reported" not in df_in.columns:
+        return df_in.copy()
+    mask = (df_in["Date_reported"] >= start) & (df_in["Date_reported"] <= end)
+    return df_in.loc[mask].copy()
+
+df_filtered = filter_df_by_date(df, start_ts, end_ts)
+
+@st.cache_data
+def compute_latest_aggregates(df_filtered: pd.DataFrame, latest_original: pd.DataFrame) -> pd.DataFrame:
+    # groupby only once; keep necessary columns
+    if df_filtered.empty:
+        return pd.DataFrame()
+    grp = df_filtered.groupby("Country", as_index=False).agg({
         "New_cases": "sum",
         "New_deaths": "sum"
-    })
-    .rename(columns={
-        "New_cases": "Cumulative_cases",
-        "New_deaths": "Cumulative_deaths"
-    })
-)
+    }).rename(columns={"New_cases": "Cumulative_cases", "New_deaths": "Cumulative_deaths"})
+    # merge population & iso3 if present in latest_original
+    if {"Country","Country_code3","Population"}.issubset(latest_original.columns):
+        meta = latest_original[["Country","Country_code3","Population"]].drop_duplicates(subset=["Country"])
+        merged = grp.merge(meta, on="Country", how="left")
+    else:
+        merged = grp
+    # safe computations
+    if "Population" in merged.columns:
+        merged["Cases_per_million"] = merged.apply(
+            lambda r: r["Cumulative_cases"] / (r["Population"]/1_000_000) if pd.notnull(r.get("Population")) and r.get("Population")>0 else np.nan,
+            axis=1
+        )
+    else:
+        merged["Cases_per_million"] = np.nan
+    merged["Fatality_rate"] = merged.apply(
+        lambda r: (r["Cumulative_deaths"]/r["Cumulative_cases"]*100) if r["Cumulative_cases"]>0 else np.nan,
+        axis=1
+    )
+    return merged
 
-# ✅ Ghép thêm thông tin bổ sung từ file latest gốc (đã có Country_code3, Population,…)
-latest_filtered = latest_filtered.merge(
-    latest[["Country", "Country_code", "Country_code3", "Population"]],
-    on=["Country", "Country_code"],
-    how="left"
-)
-
-# Tính thêm các chỉ số
-latest_filtered["Cases_per_million"] = (
-    latest_filtered["Cumulative_cases"] / (latest_filtered["Population"] / 1_000_000)
-)
-latest_filtered["Fatality_rate"] = (
-    latest_filtered["Cumulative_deaths"] / latest_filtered["Cumulative_cases"]
-) * 100
+latest_filtered = compute_latest_aggregates(df_filtered, latest)
 
 # ===============================
-# 4️⃣ KPI Cards
+# 5) KPI (fast)
 # ===============================
 col1, col2, col3, col4 = st.columns(4)
-total_cases = latest_filtered["Cumulative_cases"].sum()
-total_deaths = latest_filtered["Cumulative_deaths"].sum()
-fatality_rate = total_deaths / total_cases * 100 if total_cases > 0 else 0
-affected_countries = latest_filtered["Country"].nunique()
+total_cases = int(latest_filtered["Cumulative_cases"].sum()) if not latest_filtered.empty else 0
+total_deaths = int(latest_filtered["Cumulative_deaths"].sum()) if not latest_filtered.empty else 0
+fatality_rate_overall = (total_deaths/total_cases*100) if total_cases>0 else 0
+affected_countries = int(latest_filtered["Country"].nunique()) if not latest_filtered.empty else 0
 
-col1.metric("🦠 Tổng ca nhiễm", f"{total_cases:,}")
-col2.metric("⚰️ Tổng ca tử vong", f"{total_deaths:,}")
-col3.metric("📊 Tỷ lệ tử vong (%)", f"{fatality_rate:.2f}")
-col4.metric("🌎 Quốc gia bị ảnh hưởng", f"{affected_countries}")
+col1.metric("🦠 Tổng ca nhiễm (giai đoạn)", f"{total_cases:,}")
+col2.metric("⚰️ Tổng ca tử vong (giai đoạn)", f"{total_deaths:,}")
+col3.metric("📊 Tỷ lệ tử vong (%)", f"{fatality_rate_overall:.2f}")
+col4.metric("🌎 Quốc gia (ghi nhận trong giai đoạn)", f"{affected_countries}")
 
 # ===============================
-# 5️⃣ Tabs cho phần nội dung chính
+# 6) Main content (Tabs)
 # ===============================
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📈 Xu hướng ca nhiễm",
-    "🗺️ Bản đồ thế giới",
-    "🏆 Top quốc gia",
-    "📋 Dữ liệu chi tiết",
-])
+tab1, tab2, tab3 = st.tabs(["📈 Xu hướng", "🗺️ Bản đồ", "📊 Top & ML"])
 
-# --- TAB 1: Xu hướng theo thời gian ---
+# --- TAB 1: Trends ---
 with tab1:
     st.subheader("📈 Xu hướng ca nhiễm theo thời gian")
-    if "selected_country" in locals() and selected_country != "Toàn cầu":
-        country_data = df_filtered[df_filtered["Country"] == selected_country]
-        fig_line = px.line(
-            country_data, x="Date_reported", y="New_cases",
-            title=f"Số ca nhiễm mới tại {selected_country}",
-            labels={"Date_reported": "Ngày", "New_cases": "Ca nhiễm mới"},
-            color_discrete_sequence=["#E74C3C"]
-        )
+    if selected_country != "Toàn cầu":
+        df_country = df_filtered[df_filtered["Country"]==selected_country]
+        fig_line = px.line(df_country, x="Date_reported", y="New_cases", title=f"Số ca mới - {selected_country}", labels={"New_cases":"Ca mới","Date_reported":"Ngày"})
     else:
-        global_trend = df_filtered.groupby("Date_reported")[["New_cases", "New_deaths"]].sum().reset_index()
-        fig_line = px.line(
-            global_trend, x="Date_reported", y="New_cases",
-            title="Số ca nhiễm mới toàn cầu theo thời gian",
-            labels={"Date_reported": "Ngày", "New_cases": "Ca nhiễm mới"}
-        )
+        agg = df_filtered.groupby("Date_reported", as_index=False)[["New_cases","New_deaths"]].sum()
+        fig_line = px.line(agg, x="Date_reported", y="New_cases", title="Số ca mới toàn cầu (giai đoạn)", labels={"New_cases":"Ca mới","Date_reported":"Ngày"})
     st.plotly_chart(fig_line, use_container_width=True)
 
-# --- TAB 2: Bản đồ ---
+# --- TAB 2: Maps ---
 with tab2:
-    st.subheader("🗺️ Bản đồ COVID-19 theo quốc gia")
-
-    # ✅ Bảo đảm có cột ISO3 từ dữ liệu gốc (latest)
-    if "Country_code3" not in latest_filtered.columns:
-        latest_filtered = latest_filtered.merge(
-            latest[["Country", "Country_code3"]].drop_duplicates(),
-            on="Country",
-            how="left"
-        )
-
-    # --- Bộ chọn loại dữ liệu hiển thị ---
-    map_metric = st.radio(
-        "Chọn loại dữ liệu hiển thị:",
-        ("Tổng số ca nhiễm", "Tỷ lệ ca/1 triệu dân"),
-        horizontal=True,
-    )
-
-    color_col = (
-        "Cases_per_million"
-        if map_metric == "Tỷ lệ ca/1 triệu dân"
-        else "Cumulative_cases"
-    )
-    color_title = "Ca/1 triệu dân" if color_col == "Cases_per_million" else "Ca nhiễm"
-
-    # --- Bản đồ 2D ---
-    st.markdown("#### 🗺️ Bản đồ 2D COVID-19 theo quốc gia")
-    fig = px.choropleth(
-        latest_filtered,
-        locations="Country_code3",           # ISO3 code
-        color=color_col,                     # chọn theo radio
-        hover_name="Country",
-        color_continuous_scale="Reds",
-        title=f"🌍 {map_metric} theo quốc gia (2D)",
-        projection="natural earth"
-    )
-    fig.update_layout(
-        geo=dict(showframe=False, showcoastlines=True),
-        paper_bgcolor="#0E1117",
-        font=dict(color="white", size=14),
-        title_x=0.5
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    # --- Bản đồ 3D ---
-    st.markdown("#### 🌐 Bản đồ 3D (Interactive Globe)")
-    fig_globe = go.Figure(go.Choropleth(
-        locations=latest_filtered["Country_code3"],
-        z=latest_filtered[color_col],
-        text=(
-            latest_filtered["Country"] + "<br>" +
-            f"{color_title}: " + latest_filtered[color_col].round(2).astype(str)
-        ),
-        colorscale="Reds",
-        colorbar_title=color_title,
-        marker_line_color="black",
-        marker_line_width=0.5
-    ))
-
-    fig_globe.update_geos(
-        projection_type="orthographic",
-        showcountries=True,
-        showcoastlines=True,
-        showocean=True,
-        showland=True,
-        landcolor="LightGreen",
-        oceancolor="LightBlue",
-        lataxis_showgrid=True,
-        lonaxis_showgrid=True,
-    )
-
-    fig_globe.update_layout(
-        title_text=f"{map_metric} theo quốc gia (Interactive Globe)",
-        margin={"r": 0, "t": 50, "l": 0, "b": 0},
-        height=600
-    )
-
-    st.plotly_chart(fig_globe, use_container_width=True)
-
-# --- TAB 3: Tổng quan ---
-with tab3:
-    st.subheader("📊 Phân tích Top quốc gia COVID-19")
-
-    # Thêm cột tỷ lệ tử vong (%)
-    latest_filtered["Death_rate"] = (
-        latest_filtered["Cumulative_deaths"] / latest_filtered["Cumulative_cases"].replace(0, None)
-    ) * 100
-
-    # Dropdown chọn loại thống kê
-    option = st.selectbox(
-        "Chọn loại thống kê hiển thị:",
-        (
-            "Tổng ca nhiễm cao nhất",
-            "Tổng ca tử vong cao nhất",
-            "Tỷ lệ tử vong cao nhất (%)",
-            "Ca nhiễm trên 1 triệu dân cao nhất",
-        )
-    )
-
-    # Xác định cột dữ liệu tương ứng
-    if option == "Tổng ca nhiễm cao nhất":
-        metric_col = "Cumulative_cases"
-        title = "🌍 Top 10 quốc gia có tổng ca nhiễm COVID-19 cao nhất"
-        color_scale = "Reds"
-    elif option == "Tổng ca tử vong cao nhất":
-        metric_col = "Cumulative_deaths"
-        title = "⚰️ Top 10 quốc gia có tổng ca tử vong COVID-19 cao nhất"
-        color_scale = "OrRd"
-    elif option == "Tỷ lệ tử vong cao nhất (%)":
-        metric_col = "Death_rate"
-        title = "💀 Top 10 quốc gia có tỷ lệ tử vong cao nhất (%)"
-        color_scale = "Peach"
+    st.subheader("🗺️ Bản đồ (tùy chọn hiển thị)")
+    if latest_filtered.empty:
+        st.info("Không có dữ liệu để vẽ bản đồ trong khoảng ngày hiện tại.")
     else:
-        metric_col = "Cases_per_million"
-        title = "🌎 Top 10 quốc gia có ca nhiễm trên 1 triệu dân cao nhất"
-        color_scale = "Reds"
-        
-    latest_filtered[metric_col] = pd.to_numeric(latest_filtered[metric_col], errors="coerce")
+        if show_map_2d:
+            st.markdown("#### Bản đồ 2D — Tổng ca (theo khoảng ngày)")
+            fig2 = px.choropleth(
+                latest_filtered,
+                locations="Country_code3" if "Country_code3" in latest_filtered.columns else "Country",
+                color="Cumulative_cases",
+                hover_name="Country",
+                color_continuous_scale="Reds",
+                projection="natural earth"
+            )
+            fig2.update_layout(margin=dict(t=40, b=0, l=0, r=0))
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.caption("Bản đồ 2D bị tắt (bật lại ở sidebar).")
 
-    # Lấy top 10 quốc gia theo lựa chọn
-    top_countries = latest_filtered.nlargest(10, metric_col)
+        if show_map_3d:
+            st.markdown("#### Bản đồ 3D (Interactive globe) — *có thể nặng*")
+            fig3 = go.Figure(go.Choropleth(
+                locations=latest_filtered["Country_code3"] if "Country_code3" in latest_filtered.columns else latest_filtered["Country"],
+                z=latest_filtered["Cases_per_million"] if "Cases_per_million" in latest_filtered.columns else latest_filtered["Cumulative_cases"],
+                text=latest_filtered["Country"] if "Country" in latest_filtered.columns else None,
+                colorscale="Reds",
+                marker_line_color="black",
+                marker_line_width=0.3,
+            ))
+            fig3.update_geos(projection_type="orthographic", showocean=True, showcountries=True)
+            fig3.update_layout(height=600, margin=dict(t=40, b=0, l=0, r=0))
+            st.plotly_chart(fig3, use_container_width=True)
+        else:
+            st.caption("Bản đồ 3D tắt (bật nếu muốn).")
 
-    # --- Vẽ biểu đồ ---
-    st.markdown(f"### {title}")
+# --- TAB 3: Top & ML (split)
+with tab3:
+    left, right = st.columns([2,1])
+    with left:
+        st.subheader("🏆 Top quốc gia (theo khoảng ngày)")
+        if latest_filtered.empty:
+            st.info("Không có dữ liệu Top.")
+        else:
+            metric_opt = st.selectbox("Chọn metric", ["Cumulative_cases","Cumulative_deaths","Cases_per_million","Fatality_rate"])
+            df_plot = latest_filtered.copy()
+            df_plot[metric_opt] = pd.to_numeric(df_plot[metric_opt], errors="coerce").fillna(0)
+            top10 = df_plot.nlargest(10, metric_opt)
+            fig_top = px.bar(
+                top10.sort_values(metric_opt, ascending=True),
+                x=metric_opt, y="Country", orientation="h",
+                text=metric_opt, color=metric_opt, color_continuous_scale="Reds",
+                labels={metric_opt: metric_opt, "Country":"Quốc gia"}, height=520
+            )
+            fig_top.update_traces(texttemplate="%{text:,.0f}" if metric_opt!="Fatality_rate" else "%{text:.2f}%", textposition="outside")
+            fig_top.update_layout(margin=dict(l=70,r=80,t=60,b=20), plot_bgcolor="white")
+            st.plotly_chart(fig_top, use_container_width=True)
 
-    fig_top = px.bar(
-        top_countries.sort_values(metric_col, ascending=True),
-        x=metric_col,
-        y="Country",
-        orientation="h",
-        text=metric_col,
-        color=metric_col,
-        color_continuous_scale=color_scale,
-        labels={metric_col: title, "Country": "Quốc gia"},
-        title=title,
-    )
+    with right:
+        st.subheader("🔮 Machine Learning (Load model sẵn)")
+        if not show_ml:
+            st.info("Bật ML ở sidebar để thao tác với mô hình đã train.")
+        else:
+            # show available models
+            avail = {k:v for k,v in MODELS.items() if v is not None}
+            if not avail:
+                st.warning("Không có model đã train trong thư mục app/models. Hãy upload model_lr.pkl, model_rf.pkl, model_xgb.json")
+            else:
+                model_name = st.selectbox("Chọn model", list(avail.keys()))
+                model = avail[model_name]
+                country_ml = st.selectbox("Chọn quốc gia để forecast", countries, index=countries.index("Viet Nam") if "Viet Nam" in countries else 0)
+                horizon_ml = st.slider("Số ngày dự báo", 7, 30, value=14)
 
-    fig_top.update_traces(
-        texttemplate="%{text:,.2f}" if "rate" in metric_col.lower() else "%{text:,}",
-        textposition="outside", insidetextanchor="start", cliponaxis=False
-    )
+                # cached features per country
+                @st.cache_data
+                def make_features_cached(country_name):
+                    d = df[df["Country"]==country_name].sort_values("Date_reported").reset_index(drop=True)
+                    if d.empty:
+                        return pd.DataFrame()
+                    d["lag_1"] = d["New_cases"].shift(1)
+                    d["lag_7"] = d["New_cases"].shift(7)
+                    d["lag_14"] = d["New_cases"].shift(14)
+                    d["ma7"] = d["New_cases"].rolling(7).mean().shift(1)
+                    d["ma14"] = d["New_cases"].rolling(14).mean().shift(1)
+                    d["weekday"] = d["Date_reported"].dt.weekday
+                    d = d.dropna().reset_index(drop=True)
+                    return d
 
+                df_feat = make_features_cached(country_ml)
+                if df_feat.empty or len(df_feat) < 20:
+                    st.warning("Dữ liệu thời gian của quốc gia này quá ít để dự báo (cần ≥ 20).")
+                else:
+                    if st.button("Chạy dự báo (load model)"):
+                        # iterative forecast using cached model
+                        def iterative_forecast_local(model_local, df_local, horizon_local):
+                            last = df_local.iloc[-1]
+                            lag1, lag7, lag14 = last["lag_1"], last["lag_7"], last["lag_14"]
+                            recent = list(df_local["New_cases"].iloc[-14:].values)
+                            preds = []
+                            features_order = ["lag_1","lag_7","lag_14","ma7","ma14","weekday"]
+                            for i in range(horizon_local):
+                                row = [
+                                    lag1,
+                                    lag7,
+                                    lag14,
+                                    np.mean(recent[-7:]) if len(recent)>=1 else 0,
+                                    np.mean(recent[-14:]) if len(recent)>=1 else 0,
+                                    (int(last["Date_reported"].weekday()) + i + 1) % 7
+                                ]
+                                X = np.array(row).reshape(1,-1)
+                                p = model_local.predict(X)[0]
+                                p = max(0, p)
+                                preds.append(p)
+                                recent.append(p)
+                                lag14, lag7, lag1 = lag7, lag1, p
+                            return np.array(preds)
 
-    fig_top.update_layout(
-        xaxis_title=None,
-        yaxis_title=None,
-        coloraxis_showscale=False,
-        height=500,
-        paper_bgcolor="#0E1117",
-        plot_bgcolor="#0E1117",
-        font=dict(color="white", size=14),
-        title=dict(x=0.5, font=dict(size=18)),
-        margin=dict(l=50, r=80, t=80, b=20)
-    )
-
-    st.plotly_chart(fig_top, use_container_width=True)
-
-# --- TAB 4: Dữ liệu chi tiết ---
-with tab4:
-    st.subheader("📋 Dữ liệu chi tiết theo quốc gia (theo thời gian lọc)")
-    st.dataframe(
-        latest_filtered[["Country", "Cumulative_cases", "Cumulative_deaths", "Fatality_rate"]]
-        .sort_values(by="Cumulative_cases", ascending=False)
-        .reset_index(drop=True)
-    )   
-
-# ---------------------------
-# TAB: 🔮 Machine Learning Dự báo COVID-19
-# ---------------------------
-
-with st.expander("🔮 Machine Learning — Dự báo số ca nhiễm"):
-    st.subheader("📈 Dự báo số ca nhiễm theo mô hình đã huấn luyện")
-
-    # ==== CHỌN QUỐC GIA ====
-    countries_all = sorted(df["Country"].unique())
-    country_sel = st.selectbox(
-        "Chọn quốc gia:",
-        countries_all,
-        index=countries_all.index("Viet Nam") if "Viet Nam" in countries_all else 0
-    )
-
-    # ==== CHỌN MODEL ====
-    model_name = st.selectbox(
-        "Chọn mô hình dự báo:",
-        list(MODELS.keys()),
-        index=0
-    )
-    model = MODELS[model_name]
-
-    # ==== SỐ NGÀY DỰ BÁO ====
-    horizon = st.slider("Số ngày dự báo", 7, 30, value=14)
-
-    # Lấy dữ liệu theo quốc gia
-    df_country = df[df["Country"] == country_sel].sort_values("Date_reported")
-    df_country = df_country.reset_index(drop=True)
-
-    if len(df_country) < 20:
-        st.warning("❗ Không đủ dữ liệu để dự báo (cần ≥ 20 dòng)")
-        st.stop()
-
-    # ---------------------------
-    # 🎯 FEATURE ENGINEERING
-    # ---------------------------
-    def make_features(df_country):
-        dfc = df_country.copy()
-        dfc = dfc.sort_values("Date_reported").reset_index(drop=True)
-
-        dfc["lag_1"]  = dfc["New_cases"].shift(1)
-        dfc["lag_7"]  = dfc["New_cases"].shift(7)
-        dfc["lag_14"] = dfc["New_cases"].shift(14)
-
-        dfc["ma7"]  = dfc["New_cases"].rolling(7).mean().shift(1)
-        dfc["ma14"] = dfc["New_cases"].rolling(14).mean().shift(1)
-
-        dfc["weekday"] = dfc["Date_reported"].dt.weekday
-
-        dfc = dfc.dropna()
-        return dfc
-
-    features = ["lag_1", "lag_7", "lag_14", "ma7", "ma14", "weekday"]
-    df_feat = make_features(df_country)
-
-    if st.checkbox("📌 Xem dữ liệu feature (10 dòng cuối)"):
-        st.dataframe(df_feat.tail(10))
-
-    # ---------------------------
-    # 🎯 DỰ BÁO TƯƠNG LAI
-    # ---------------------------
-    def iterative_forecast(model, df_feat, horizon=14):
-        last = df_feat.iloc[-1].copy()
-
-        lag1 = last["lag_1"]
-        lag7 = last["lag_7"]
-        lag14 = last["lag_14"]
-
-        recent = list(df_feat["New_cases"].iloc[-14:].values)
-        preds = []
-
-        for i in range(horizon):
-            row = {
-                "lag_1": lag1,
-                "lag_7": lag7,
-                "lag_14": lag14,
-                "ma7": np.mean(recent[-7:]),
-                "ma14": np.mean(recent[-14:]),
-                "weekday": (last["Date_reported"].weekday() + i + 1) % 7,
-            }
-
-            X_input = np.array([row[f] for f in features]).reshape(1, -1)
-            pred = max(0, model.predict(X_input)[0])
-            preds.append(pred)
-
-            # update lags
-            recent.append(pred)
-            lag14, lag7, lag1 = lag7, lag1, pred
-
-        return np.array(preds)
-
-    # ---------------------------
-    # RUN FORECAST
-    # ---------------------------
-    if st.button("🚀 Chạy dự báo"):
-        preds = iterative_forecast(model, df_feat, horizon=horizon)
-
-        # Tạo ngày tương lai
-        last_date = df_country["Date_reported"].max()
-        future_dates = [last_date + pd.Timedelta(days=i+1) for i in range(horizon)]
-
-        # Vẽ biểu đồ
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=df_country["Date_reported"].tail(60),
-            y=df_country["New_cases"].tail(60),
-            name="Thực tế",
-            mode="lines"
-        ))
-        fig.add_trace(go.Scatter(
-            x=future_dates,
-            y=preds,
-            name=f"Dự báo ({model_name})",
-            mode="lines+markers"
-        ))
-
-        fig.update_layout(
-            title=f"Dự báo {horizon} ngày tiếp theo tại {country_sel}",
-            xaxis_title="Ngày",
-            yaxis_title="Ca nhiễm mới"
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Bảng kết quả
-        df_out = pd.DataFrame({
-            "Date": future_dates,
-            "Prediction": preds.astype(int)
-        })
-        st.dataframe(df_out)
-
+                        preds = iterative_forecast_local(model, df_feat, horizon_ml)
+                        last_date = df[df["Country"]==country_ml]["Date_reported"].max()
+                        future_dates = [last_date + pd.Timedelta(days=i+1) for i in range(horizon_ml)]
+                        figf = go.Figure()
+                        hist = df[df["Country"]==country_ml].tail(90)
+                        figf.add_trace(go.Scatter(x=hist["Date_reported"], y=hist["New_cases"], name="Actual", mode="lines"))
+                        figf.add_trace(go.Scatter(x=future_dates, y=preds, name="Forecast", mode="lines+markers"))
+                        figf.update_layout(title=f"Forecast ({model_name}) — {country_ml}", xaxis_title="Date", yaxis_title="New cases")
+                        st.plotly_chart(figf, use_container_width=True)
+                        out_df = pd.DataFrame({"Date":future_dates, model_name: preds.astype(int)})
+                        st.dataframe(out_df)
 
 # ===============================
 # 6️⃣ Footer
