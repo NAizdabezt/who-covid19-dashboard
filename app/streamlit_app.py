@@ -1,14 +1,8 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
 import numpy as np
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-import xgboost as xgb
-import plotly.graph_objects as go
 import plotly.express as px
+import plotly.graph_objects as go
 import joblib
 import xgboost as xgb
 # ===============================
