@@ -1,5 +1,4 @@
 import plotly
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,7 +6,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import joblib
 import xgboost as xgb
-st.write("Plotly version:", plotly.__version__)
 # ===============================
 # 1️⃣ Cấu hình trang
 # ===============================
